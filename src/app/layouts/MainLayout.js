@@ -12,7 +12,8 @@ export default function MainLayout({ children }) {
   const navLinks = [
     { name: 'Dashboard', path: '/' },
     { name: 'Item Master', path: '/item-master' },
-    { name: 'Logout', path: '/login' }
+    { name: 'Good Receive Notice', path: '/grn' },
+    { name: 'Logout', path: '/logout' }
   ];
 
   return (
@@ -26,11 +27,11 @@ export default function MainLayout({ children }) {
         </div>
 
         <div className="space-y-2 text-white">
-          {navLinks.map((link) => {
+          {navLinks.map((link, index) => {
             const isActive = pathname === link.path;
             return (
               <a
-                key={link.path}
+                key={`${link.path}-${index}`}
                 href={link.path}
                 className={`block px-4 py-2 rounded transition font-medium ${
                   isActive ? 'bg-[#2c2c2c] font-bold' : 'hover:bg-[#4c4c4c]' }`}
@@ -42,7 +43,7 @@ export default function MainLayout({ children }) {
         </div>
       </aside>
 
-      <main className="flex-1 p-6 bg-gray-100 overflow-auto">{children}</main>
+      <main className="flex-1 p-6 bg-gray-100 overflow-auto">{ children }</main>
 
       <ToastContainer />
     </div>

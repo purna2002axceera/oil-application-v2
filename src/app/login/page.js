@@ -22,6 +22,7 @@ export default function LoginPage() {
       
       // Check based on backend response
       if (res.data.message === 'Login successful') {
+        localStorage.setItem('isLoggedIn', 'true');
         router.push('/');
 
       } else {
@@ -60,7 +61,7 @@ export default function LoginPage() {
           {loading ? 'Logging in...' : 'Login'}
         </button>
       </div>
-      <p className='p-5 text-center text-[#C9C9C9] mt-3'>Designed And Developed By C.A Software Sollutions</p>
+      <p className='p-5 text-center text-[#C9C9C9] mt-3'>Designed And Developed By C.A Software Solutions</p>
       </form>
     
     </div>

@@ -2,11 +2,13 @@
 
 import React, { useState, useEffect } from 'react';
 import { Table, Button } from 'antd';
-import { EditOutlined } from '@ant-design/icons';
+import { EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import CreateBrand from '../components/CreateBrand';
 import MainLayout from '../layouts/MainLayout';
 import { customToast } from '../utils/toast';
+import { L_Number_List } from '../utils/l_numbers';
+import { Select } from 'antd';
 
 
 export default function ItemMaster() {
@@ -14,7 +16,6 @@ export default function ItemMaster() {
   const [brands, setBrands] = useState([]);
   const [items, setItems] = useState([]);
   const [selectedBrand, setSelectedBrand] = useState('');
-  
   const [materialCode, setMaterialCode] = useState('');
   const [wholesaleAmount, setWholesaleAmount] = useState('');
   const [retailAmount, setRetailAmount] = useState('');
@@ -24,7 +25,6 @@ export default function ItemMaster() {
   const [isUpdateMode, setIsUpdateMode] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
 
-  // Initialize data on component mount
   useEffect(() => {
     fetchBrands();
     fetchItems();
@@ -46,6 +46,7 @@ export default function ItemMaster() {
     try {
       const response = await fetch('http://localhost:8080/api/item');
       const data = await response.json();
+      console.log("items data:", data);
       setItems(data);
     } catch (error) {
       console.error('Error fetching items:', error);
@@ -63,42 +64,78 @@ export default function ItemMaster() {
     setMaterialDescription(record.itemDescription);
   };
 
-  const handleAddItem = async () => {
-    try {
-      if (isUpdateMode) {
-        // Update existing item
-        await axios.put('http://localhost:8080/api/item', {
-          id: editingItem.id,
-          itemCode: materialCode,
-          itemDescription: materialDescription,
-          wholesalePrice: parseFloat(wholesaleAmount) || 0,
-          retailPrice: parseFloat(retailAmount) || 0,
-          itemBrand: parseInt(selectedBrand),
-          status: "ACTIVE",
-          modifiedBy: "system_user"
-        });
-        customToast('success', "Item Updated Successfully");
-      } else {
-        // Create new item
-        await axios.post('http://localhost:8080/api/item', {
-          itemCode: materialCode,
-          itemDescription: materialDescription,
-          wholesalePrice: parseFloat(wholesaleAmount) || 0,
-          retailPrice: parseFloat(retailAmount) || 0,
-          itemBrand: parseInt(selectedBrand),
-          createdBy: "system_user"
-        });
-        customToast('success', "Item Created Successfully");
+  const handleDelete = async ( data ) => {
+     try {
+       const res = await axios.delete(`http://localhost:8080/api/item/${data.id}`);
+       if( !res.data.id ){
+          customToast('error', "Error When Deleting");
+          return
+       }
+        customToast('success', "Item Deleted Successfully");     
+        handleReset();
+        fetchItems();
+     } catch (error) {
+      if(error.response.data.message.includes("This item has associated GRN")){
+        return  customToast('error', `This item has associated GRN`);
       }
+        customToast('error', `Error When Deleting ${error}`);
+     } 
+  }
+
+ const handleAddItem = async () => {
+  try {
+    if (!wholesaleAmount || !materialCode || !selectedBrand || !retailAmount) {
+      return customToast('error', "All Fields Are Required");
+    }
+    let LnumberData = L_Number_List.find((data) => materialCode === data.code);
+    if (!isUpdateMode || (editingItem && editingItem.itemCode !== materialCode)) {
+      if (!LnumberData) {
+        return customToast('error', "Invalid L Number");
+      }
+    }
+    if (isUpdateMode) {
       
-      handleReset();
-      fetchItems();
-      
-    } catch (error) {
-      console.error('Error saving item:', error);
+      await axios.put('http://localhost:8080/api/item', {
+        id: editingItem.id,
+        itemCode: materialCode,
+        itemDescription: materialDescription,
+        wholesalePrice: parseFloat(wholesaleAmount) || 0,
+        retailPrice: parseFloat(retailAmount) || 0,
+        itemBrand: parseInt(selectedBrand),
+        status: "ACTIVE",
+        modifiedBy: "system_user",
+        packSize: LnumberData.pack_size,
+        packUnit: LnumberData.pack_unit,
+      });
+
+      customToast('success', "Item Updated Successfully");
+    } else {
+      await axios.post('http://localhost:8080/api/item', {
+        itemCode: materialCode,
+        itemDescription: materialDescription,
+        wholesalePrice: parseFloat(wholesaleAmount) || 0,
+        retailPrice: parseFloat(retailAmount) || 0,
+        itemBrand: parseInt(selectedBrand),
+        packSize: LnumberData.pack_size,
+        packUnit: LnumberData.pack_unit,
+        createdBy: "system_user"
+      });
+      customToast('success', "Item Created Successfully");
+    }
+
+    handleReset();
+    fetchItems();
+
+  } catch (error) {
+    console.error('Error saving item:', error);
+    if( error.response.data.message.includes("Item already exists with this code and brand") ){
+      customToast('error', "Item already exists with this code and brand");
+    }else{
       customToast('error', "Something Went Wrong");
     }
-  };
+  }
+};
+
 
   const handleReset = () => {
     setSelectedBrand('');
@@ -115,7 +152,31 @@ export default function ItemMaster() {
     setCreateBrand(true);
   };
 
-  // Table configuration
+ const handleDeleteBrand = async (id) => {
+  try {
+    const response = await axios.delete(`http://localhost:8080/api/brand/${id}`);
+
+    if (response.data && response.data.id) {
+      customToast('success', 'Brand Deleted Successfully');
+      fetchBrands(); 
+      if (selectedBrand === id.toString()) {
+        setSelectedBrand('');
+      }
+    } else {
+      customToast('error', 'Error when deleting brand');
+    }
+  } catch (error) {
+    const message =
+      error.response?.data?.message ||
+      error.response?.data ||
+      error.message ||
+      'Error deleting brand';
+    customToast('error', message);
+  }
+};
+
+
+
   const columns = [
     {
       title: 'Item Code',
@@ -123,14 +184,15 @@ export default function ItemMaster() {
       key: 'itemCode',
     },
     {
-      title: 'Description',
-      dataIndex: 'itemDescription',
-      key: 'itemDescription',
-    },
-    {
       title: 'Brand',
       dataIndex: ['itemBrand', 'brandName'],
       key: 'brandName',
+    },
+    {
+      title: 'Retail Price',
+      dataIndex: 'retailPrice',
+      key: 'retailPrice',
+      render: (price) => `LKR ${price.toFixed(2)}`,
     },
     {
       title: 'Wholesale Price',
@@ -139,26 +201,38 @@ export default function ItemMaster() {
       render: (price) => `LKR ${price.toFixed(2)}`,
     },
     {
-      title: 'Retail Price',
-      dataIndex: 'retailPrice',
-      key: 'retailPrice',
-      render: (price) => `LKR ${price.toFixed(2)}`,
+      title: 'Available Stock',
+      dataIndex: 'availableStock',
+      key: 'availableStock',
     },
-  
     {
-      title: 'Action',
-      key: 'action',
-      render: (_, record) => (
-        <Button 
-          type="primary" 
-          icon={<EditOutlined />} 
-          onClick={() => handleEdit(record)}
-          size="small"
-        >
-        </Button>
-      ),
+      title: 'Description',
+      dataIndex: 'itemDescription',
+      key: 'itemDescription',
     },
-  ];
+    {
+    title: 'Action',
+    key: 'action',
+    render: (_, record) => (
+      <>
+       <Button 
+         type="primary" 
+         icon={<EditOutlined />} 
+         onClick={() => handleEdit(record)}
+         size="small"
+         style={{ marginRight: 8 }}
+       />
+      <Button 
+        type="primary" 
+        danger
+        icon={<DeleteOutlined />} 
+        onClick={() => handleDelete(record)}
+        size="small"
+      />
+    </>
+  ),
+}
+]
 
   return (
     <MainLayout>
@@ -175,70 +249,88 @@ export default function ItemMaster() {
 
       {/* Form Section */}
       <div className="space-y-4 flex flex-col w-full">
-        {/* Brand and Material Code Row */}
-        <div className="flex gap-5">
-          <div className="flex items-center w-[40%] space-x-2">
-            <select
-              value={selectedBrand}
-              onChange={(e) => setSelectedBrand(e.target.value)}
-              className="flex-1 px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-white"
+
+        <div className="flex gap-5 w-full">
+          <div className='flex flex-col w-full'>
+            <label className='mb-1'>Select Brand</label>
+            <div className="flex items-center gap-2 space-x-2">
+            <Select
+              value={selectedBrand || undefined}
+              onChange={(value) => setSelectedBrand(value)}
+              placeholder="Select Brand"
+              className='!shadow-md border-0'
+              style={{ flex: 1, height: 48, borderRadius: 9, background: '#fff', boxShadow: '0 2px 8px #f0f1f2', fontFamily:'Poppins' }}
+              dropdownStyle={{ borderRadius: 8, background: '#fff', boxShadow: '0 2px 8px #f0f1f2', padding: 8 }}
             >
-              <option value="">Select Brand</option>
+              {brands.length === 0 && (
+                <Select.Option disabled key="no-brands">No Brands</Select.Option>
+              )}
               {brands.map((brand) => (
-                <option key={brand.id} value={brand.id}>
-                  {brand.brandName}
-                </option>
+                <Select.Option value={brand.id.toString()} key={brand.id} className="custom-ant-option">
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontFamily:'Poppins' }}>
+                    <span>{brand.brandName}</span>
+                    <DeleteOutlined
+                      onClick={e => { e.stopPropagation(); handleDeleteBrand(brand.id) }}
+                      style={{ color: 'red', marginLeft: 8 }}
+                    />
+                  </div>
+                </Select.Option>
               ))}
-            </select>
-            <button
-              onClick={handleAddBrand}
-              className="w-8 h-8 bg-black text-white rounded-full flex items-center justify-center text-sm font-bold shadow-md hover:bg-gray-800 transition-colors"
-            >
+            </Select>
+
+            <button onClick={handleAddBrand} className="w-8 h-8 bg-black text-white rounded-full flex items-center justify-center text-sm font-bold shadow-md hover:bg-gray-800 transition-colors" >
               +
             </button>
           </div>
-          <input
+          </div>
+     
+          <div className='flex flex-col w-full'>
+           <label className='mb-1'>Material Code</label>
+           <input
             type="text"
             placeholder="Material Code"
             value={materialCode}
             onChange={(e) => setMaterialCode(e.target.value)}
-            className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0"
+            className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-white"
           />
+          </div>
+          
         </div>
 
         {/* Price Inputs Row */}
-        <div className="flex gap-5">
-          <input
-            type="number"
-            placeholder="Enter Wholesale Amount"
-            value={wholesaleAmount}
-            onChange={(e) => setWholesaleAmount(e.target.value)}
-            className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0"
-          />
-          <input
-            type="number"
-            placeholder="Enter Retail Amount"
-            value={retailAmount}
-            onChange={(e) => setRetailAmount(e.target.value)}
-            className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0"
-          />
-        </div>
+       <div className="flex gap-5">
+       <div className="flex flex-col w-full">
+       <label className="mb-1">Wholesale Amount</label>
+       <input
+         type="number"
+         placeholder="Enter Wholesale Amount"
+         value={wholesaleAmount}
+         onChange={(e) => setWholesaleAmount(e.target.value)}
+         className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-white"
+       />
+       </div>
+
+       <div className="flex flex-col w-full">
+       <label className="mb-1">Retail Amount</label>
+       <input
+        type="number"
+        placeholder="Enter Retail Amount"
+        value={retailAmount}
+        onChange={(e) => setRetailAmount(e.target.value)}
+        className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-white"
+       />
+       </div>
+       </div>
 
         {/* Text Areas Row */}
-        <div className="flex gap-5">
-          {/* <textarea
-            placeholder="Enter Product Specification..."
-            value={productSpecification}
-            onChange={(e) => setProductSpecification(e.target.value)}
-            rows={4}
-            className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 resize-none"
-          /> */}
+        <div className="flex flex-col">
+          <label className="mb-1">Description</label>
           <textarea
             placeholder="Enter Material Description..."
             value={materialDescription}
             onChange={(e) => setMaterialDescription(e.target.value)}
             rows={4}
-            className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 resize-none"
+            className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 resize-none bg-white"
           />
         </div>
 
