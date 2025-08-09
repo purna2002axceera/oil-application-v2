@@ -13,6 +13,7 @@ export default function MainLayout({ children }) {
     { name: 'Dashboard', path: '/' },
     { name: 'Item Master', path: '/item-master' },
     { name: 'Good Receive Notice', path: '/grn' },
+    { name: 'Sales', path: '/sales' },
     { name: 'Logout', path: '/logout' }
   ];
 
