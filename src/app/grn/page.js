@@ -3,10 +3,9 @@
 import React, { useEffect, useState } from 'react'
 import MainLayout from '../layouts/MainLayout'
 import axios from 'axios'
-import { DeleteOutlined, EditOutlined } from '@ant-design/icons'
+import { DeleteOutlined, EditOutlined, SearchOutlined, CalendarOutlined } from '@ant-design/icons'
 import { customToast } from '../utils/toast'
-import { Table, Button, Form, Input, InputNumber, Popconfirm, Typography } from 'antd'
-
+import { Table, Button, Form, Input, InputNumber, Popconfirm, Typography, DatePicker, Space } from 'antd'
 
 const EditableCell = ({
   editing,
@@ -56,19 +55,47 @@ const page = () => {
     const [allGrns, setAllGrns] = useState([])
     const [editingKey, setEditingKey] = useState('');
 
+    // Updated state for filters and pagination with single date
+    const [filteredGrns, setFilteredGrns] = useState([])
+    const [searchText, setSearchText] = useState('')
+    const [selectedDate, setSelectedDate] = useState(null) // Changed from dateRange to selectedDate
+    const [currentPage, setCurrentPage] = useState(1)
+    const [pageSize, setPageSize] = useState(10)
+
   const getCurrentGrnNumber = async () => {
     try {
        const res = await axios.get(`http://localhost:8080/api/grn/last-number`)
        const data = res.data
-       const lastNumber = data.split('-')[2]
-       const newNumber = parseInt(lastNumber) + 1
-       //get the current year
-       const year = new Date().getFullYear()
-       const formattedNumber = `GRN-${year}-${newNumber}`
-       setGrnNumber(formattedNumber)
-       console.log(formattedNumber)
+       
+       if (data && data.trim() !== '') {
+         const parts = data.split('-')
+         if (parts.length === 3 && !isNaN(parseInt(parts[2]))) {
+           const lastNumber = parseInt(parts[2])
+           const newNumber = lastNumber + 1
+           const year = new Date().getFullYear()
+           const formattedNumber = `GRN-${year}-${String(newNumber).padStart(3, '0')}`
+           setGrnNumber(formattedNumber)
+         } else {
+           // Invalid format, set initial number
+           const year = new Date().getFullYear()
+           const initialNumber = `GRN-${year}-001`
+           setGrnNumber(initialNumber)
+         }
+       } else {
+         // No data, set initial number
+         const year = new Date().getFullYear()
+         const initialNumber = `GRN-${year}-001`
+         setGrnNumber(initialNumber)
+       }
+       
+       console.log('GRN Number:', grnNumber)
     } catch (error) {
-        console.log(error)
+        console.log('Error fetching GRN number:', error)
+        // If API call fails, set initial number
+        const year = new Date().getFullYear()
+        const initialNumber = `GRN-${year}-001`
+        setGrnNumber(initialNumber)
+        console.log('Set initial GRN number:', initialNumber)
     }
   }
 
@@ -110,6 +137,32 @@ const page = () => {
     }
   };
 
+  // Updated filter function for single date
+  const applyFilters = () => {
+    let filtered = [...allGrns]
+
+    // Filter by GRN Number search
+    if (searchText.trim()) {
+      filtered = filtered.filter(grn => 
+        grn.grnNumber.toLowerCase().includes(searchText.toLowerCase())
+      )
+    }
+
+    // Filter by single date
+    if (selectedDate) {
+      filtered = filtered.filter(grn => {
+        const grnDate = new Date(grn.createdAt)
+        const filterDate = selectedDate.startOf('day')
+        const grnDateFormatted = grnDate.toISOString().split('T')[0]
+        const filterDateFormatted = filterDate.format('YYYY-MM-DD')
+        return grnDateFormatted === filterDateFormatted
+      })
+    }
+
+    setFilteredGrns(filtered)
+    setCurrentPage(1) // Reset to first page when filters change
+  }
+
   useEffect(() => {
     getCurrentGrnNumber()
     fetchItems()
@@ -123,6 +176,11 @@ const page = () => {
   useEffect(() => {
     calculateGrandTotal()
   }, [grnItems])
+
+  // Apply filters whenever search text, selected date, or allGrns change
+  useEffect(() => {
+    applyFilters()
+  }, [searchText, selectedDate, allGrns]) // Changed from dateRange to selectedDate
 
   const autoCalculateTotalPrice = () => {
     if (quantity && itemUnitPrice) {
@@ -245,6 +303,25 @@ const page = () => {
     } catch (error) {
       customToast('error', `Error deleting GRN: ${error.message}`)
     }
+  }
+
+  const handleSearch = (value) => {
+    setSearchText(value)
+  }
+
+  const handleDateChange = (date) => {
+    setSelectedDate(date)
+  }
+
+  const clearFilters = () => {
+    setSearchText('')
+    setSelectedDate(null) // Changed from dateRange to selectedDate
+    setCurrentPage(1)
+  }
+
+  const handleTableChange = (pagination) => {
+    setCurrentPage(pagination.current)
+    setPageSize(pagination.pageSize)
   }
 
   // Editable functions for nested table
@@ -545,21 +622,95 @@ const page = () => {
   </button>
 </div> }
 
-{/* All GRNs Expandable Table */}
-<div className="mt-12">
+{/* Updated Filter Section with Single Date */}
+<div className="mt-12 mb-6">
+  <div className="bg-white p-6 rounded-lg shadow-md">
+    <h3 className="text-lg font-semibold mb-4">Filter GRNs</h3>
+    <div className="flex flex-wrap gap-4 items-end">
+      {/* Search by GRN Number */}
+      <div className="flex flex-col">
+        <label className="mb-2 text-sm font-medium text-gray-700">Search by GRN Number</label>
+        <Input.Search
+          placeholder="Enter GRN Number"
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          onSearch={handleSearch}
+          style={{ width: 250 }}
+          prefix={<SearchOutlined />}
+          allowClear
+        />
+      </div>
+
+      {/* Single Date Filter */}
+      <div className="flex flex-col">
+        <label className="mb-2 text-sm font-medium text-gray-700">Filter by Date</label>
+        <DatePicker
+          value={selectedDate}
+          onChange={handleDateChange}
+          style={{ width: 200 }}
+          format="YYYY-MM-DD"
+          placeholder="Select Date"
+          prefix={<CalendarOutlined />}
+        />
+      </div>
+
+      {/* Clear Filters Button */}
+      <Button 
+        onClick={clearFilters}
+        style={{ height: 32 }}
+      >
+        Clear Filters
+      </Button>
+    </div>
+
+    {/* Updated Filter Results Summary */}
+    <div className="mt-4 text-sm text-gray-600">
+      {searchText || selectedDate ? (
+        <p>
+          Showing {filteredGrns.length} of {allGrns.length} GRNs
+          {searchText && ` matching "${searchText}"`}
+          {selectedDate && ` created on ${selectedDate.format('YYYY-MM-DD')}`}
+        </p>
+      ) : (
+        <p>Showing all {allGrns.length} GRNs</p>
+      )}
+    </div>
+  </div>
+</div>
+
+{/* All GRNs Expandable Table with Enhanced Pagination */}
+<div className="mt-6">
   <h2 className="text-xl font-bold mb-4">All GRNs</h2>
   <Table 
     columns={mainColumns}
-    dataSource={allGrns}
+    dataSource={filteredGrns}
     expandable={{
       expandedRowRender,
       defaultExpandedRowKeys: [],
       columnWidth: "100px",
     }}
-    pagination={{ pageSize: 10 }}
+    pagination={{
+      current: currentPage,
+      pageSize: pageSize,
+      total: filteredGrns.length,
+      showSizeChanger: true,
+      showQuickJumper: true,
+      showTotal: (total, range) => 
+        `${range[0]}-${range[1]} of ${total} items`,
+      pageSizeOptions: ['5', '10', '20', '50', '100'],
+      onChange: (page, size) => {
+        setCurrentPage(page)
+        setPageSize(size)
+      },
+      onShowSizeChange: (current, size) => {
+        setCurrentPage(1)
+        setPageSize(size)
+      }
+    }}
     size="large"
     className="text-base"
     bordered
+    onChange={handleTableChange}
   />
 </div>
 
