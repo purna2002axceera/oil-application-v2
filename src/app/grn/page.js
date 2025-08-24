@@ -5,7 +5,7 @@ import MainLayout from '../layouts/MainLayout'
 import axios from 'axios'
 import { DeleteOutlined, EditOutlined, SearchOutlined, CalendarOutlined } from '@ant-design/icons'
 import { customToast } from '../utils/toast'
-import { Table, Button, Form, Input, InputNumber, Popconfirm, Typography, DatePicker, Space } from 'antd'
+import { Table, Button, Form, Input, InputNumber, DatePicker, Select, Modal } from 'antd'
 
 const EditableCell = ({
   editing,
@@ -43,22 +43,30 @@ const EditableCell = ({
 
 const page = () => {
     const [form] = Form.useForm();
+    const [editForm] = Form.useForm();
     const [grnNumber, setGrnNumber] = useState('')
     const [supplierName, setSupplierName] = useState('')
     const [items, setItems] = useState([])
     const [quantity, setQuantity] = useState('')
     const [selectedItem, setSelectedItem] = useState('')
     const [itemUnitPrice, setItemUnitPrice] = useState('')
+    const [invoiceNumber, setInvoiceNumber] = useState('')
     const [totalPrice, setTotalPrice] = useState('')
     const [grnItems, setGrnItems] = useState([])
     const [grandTotal, setGrandTotal] = useState(0)
     const [allGrns, setAllGrns] = useState([])
     const [editingKey, setEditingKey] = useState('');
+    
+    // Edit modal states
+    const [isEditModalVisible, setIsEditModalVisible] = useState(false)
+    const [editingGrn, setEditingGrn] = useState(null)
+    const [editGrnItems, setEditGrnItems] = useState([])
+    const [editGrandTotal, setEditGrandTotal] = useState(0)
 
     // Updated state for filters and pagination with single date
     const [filteredGrns, setFilteredGrns] = useState([])
     const [searchText, setSearchText] = useState('')
-    const [selectedDate, setSelectedDate] = useState(null) // Changed from dateRange to selectedDate
+    const [selectedDate, setSelectedDate] = useState(null)
     const [currentPage, setCurrentPage] = useState(1)
     const [pageSize, setPageSize] = useState(10)
 
@@ -73,25 +81,22 @@ const page = () => {
            const lastNumber = parseInt(parts[2])
            const newNumber = lastNumber + 1
            const year = new Date().getFullYear()
-           const formattedNumber = `GRN-${year}-${String(newNumber).padStart(3, '0')}`
+           const formattedNumber = `PO-${year}-${String(newNumber).padStart(3, '0')}`
            setGrnNumber(formattedNumber)
          } else {
-           // Invalid format, set initial number
            const year = new Date().getFullYear()
-           const initialNumber = `GRN-${year}-001`
+           const initialNumber = `PO-${year}-001`
            setGrnNumber(initialNumber)
          }
        } else {
-         // No data, set initial number
          const year = new Date().getFullYear()
-         const initialNumber = `GRN-${year}-001`
+         const initialNumber = `PO-${year}-001`
          setGrnNumber(initialNumber)
        }
        
        console.log('GRN Number:', grnNumber)
     } catch (error) {
         console.log('Error fetching GRN number:', error)
-        // If API call fails, set initial number
         const year = new Date().getFullYear()
         const initialNumber = `GRN-${year}-001`
         setGrnNumber(initialNumber)
@@ -137,18 +142,16 @@ const page = () => {
     }
   };
 
-  // Updated filter function for single date
   const applyFilters = () => {
     let filtered = [...allGrns]
 
-    // Filter by GRN Number search
     if (searchText.trim()) {
       filtered = filtered.filter(grn => 
-        grn.grnNumber.toLowerCase().includes(searchText.toLowerCase())
+        grn.grnNumber.toLowerCase().includes(searchText.toLowerCase()) ||
+        grn.invoiceNumber.toLowerCase().includes(searchText.toLowerCase())
       )
     }
 
-    // Filter by single date
     if (selectedDate) {
       filtered = filtered.filter(grn => {
         const grnDate = new Date(grn.createdAt)
@@ -160,7 +163,7 @@ const page = () => {
     }
 
     setFilteredGrns(filtered)
-    setCurrentPage(1) // Reset to first page when filters change
+    setCurrentPage(1)
   }
 
   useEffect(() => {
@@ -177,10 +180,19 @@ const page = () => {
     calculateGrandTotal()
   }, [grnItems])
 
-  // Apply filters whenever search text, selected date, or allGrns change
+  useEffect(() => {
+    calculateEditGrandTotal()
+  }, [editGrnItems])
+
   useEffect(() => {
     applyFilters()
-  }, [searchText, selectedDate, allGrns]) // Changed from dateRange to selectedDate
+  }, [searchText, selectedDate, allGrns])
+
+  const handleSelectItem = (val) =>{
+    setSelectedItem(val)
+    const selectedItem = items.find(item=>item.id === val)
+    setItemUnitPrice(selectedItem.wholesalePrice)
+  }
 
   const autoCalculateTotalPrice = () => {
     if (quantity && itemUnitPrice) {
@@ -193,6 +205,11 @@ const page = () => {
   const calculateGrandTotal = () => {
     const total = grnItems.reduce((sum, item) => sum + parseFloat(item.totalPrice), 0)
     setGrandTotal(total)
+  }
+
+  const calculateEditGrandTotal = () => {
+    const total = editGrnItems.reduce((sum, item) => sum + parseFloat(item.totalPrice), 0)
+    setEditGrandTotal(total)
   }
 
   const getItemName = (itemId) => {
@@ -212,12 +229,13 @@ const page = () => {
     resetForm()
     setGrnItems([])
     setGrandTotal(0)
+    setInvoiceNumber('')
     getCurrentGrnNumber()
   }
 
   const handleAddItem = () => {
-    if (!selectedItem || !supplierName || !quantity || !itemUnitPrice) {
-      customToast('error', 'Please fill all fields')
+    if (!selectedItem || !supplierName || !quantity || !itemUnitPrice || !invoiceNumber) {
+      customToast('error', 'Please fill all fields including invoice number')
       return
     }
 
@@ -228,6 +246,7 @@ const page = () => {
       quantity: parseInt(quantity),
       unitPrice: parseFloat(itemUnitPrice),
       totalPrice: parseFloat(totalPrice),
+      invoiceNumber: invoiceNumber,
       createdAt: new Date().toISOString().slice(0, 19)
     }
 
@@ -237,7 +256,6 @@ const page = () => {
       return
     }
 
-    // Always add as new item since update removes the original from table
     setGrnItems([...grnItems, newItem])
     customToast('success', 'Item added successfully')
 
@@ -257,8 +275,8 @@ const page = () => {
     setQuantity(item.quantity.toString())
     setItemUnitPrice(item.unitPrice.toString())
     setTotalPrice(item.totalPrice.toString())
+    setInvoiceNumber(item.invoiceNumber)
     
-    // Remove the item from the table
     const updatedItems = grnItems.filter((_, i) => i !== index)
     setGrnItems(updatedItems)
   }
@@ -269,8 +287,14 @@ const page = () => {
       return
     }
 
+    if (!invoiceNumber) {
+      customToast('error', 'Please enter invoice number')
+      return
+    }
+
     const grnData = {
       grnNumber: grnNumber,
+      invoiceNumber: invoiceNumber,
       totalAmount: grandTotal,
       createdAt: new Date().toISOString().slice(0, 19),
       items: grnItems.map(item => ({
@@ -280,6 +304,7 @@ const page = () => {
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         totalPrice: item.totalPrice,
+        invoiceNumber: item.invoiceNumber,
         createdAt: item.createdAt
       }))
     }
@@ -288,7 +313,7 @@ const page = () => {
       const response = await axios.post('http://localhost:8080/api/grn', grnData)
       customToast('success', 'GRN created successfully')
       resetAll()
-      fetchAllGrns() // Refresh the GRNs list
+      fetchAllGrns()
     } catch (error) {
       customToast('error', `Error creating GRN: ${error.message}`)
     }
@@ -299,9 +324,124 @@ const page = () => {
         console.log("delete grn",grnId)
       const response = await axios.delete(`http://localhost:8080/api/grn/${grnId}`)
       customToast('success', 'GRN deleted successfully')
-      fetchAllGrns() // Refresh the GRNs list
+      fetchAllGrns()
     } catch (error) {
       customToast('error', `Error deleting GRN: ${error.message}`)
+    }
+  }
+
+  // Edit GRN functions
+  const handleEditGrn = (record) => {
+    setEditingGrn(record)
+    setEditGrnItems([...record.items])
+    setIsEditModalVisible(true)
+    editForm.setFieldsValue({
+      grnNumber: record.grnNumber,
+      invoiceNumber: record.invoiceNumber,
+      totalAmount: record.totalAmount
+    })
+  }
+
+  const handleEditModalCancel = () => {
+    setIsEditModalVisible(false)
+    setEditingGrn(null)
+    setEditGrnItems([])
+    setEditGrandTotal(0)
+    editForm.resetFields()
+  }
+
+  const handleAddEditItem = (values) => {
+    if (!values.selectedItem || !values.supplierName || !values.quantity || !values.unitPrice || !values.invoiceNumber) {
+      customToast('error', 'Please fill all fields')
+      return
+    }
+
+    const newItem = {
+      itemId: parseInt(values.selectedItem),
+      itemName: getItemName(values.selectedItem),
+      supplier_name: values.supplierName,
+      quantity: parseInt(values.quantity),
+      unitPrice: parseFloat(values.unitPrice),
+      totalPrice: parseFloat(values.quantity) * parseFloat(values.unitPrice),
+      invoiceNumber: values.invoiceNumber,
+      createdAt: new Date().toISOString().slice(0, 19)
+    }
+
+    const existingItemIndex = editGrnItems.findIndex(item => item.itemId === parseInt(values.selectedItem))
+    if (existingItemIndex !== -1) {
+      const updatedItems = [...editGrnItems]
+      updatedItems[existingItemIndex] = newItem
+      setEditGrnItems(updatedItems)
+    } else {
+      setEditGrnItems([...editGrnItems, newItem])
+    }
+
+    editForm.resetFields(['selectedItem', 'supplierName', 'quantity', 'unitPrice', 'invoiceNumber'])
+    customToast('success', 'Item added successfully')
+  }
+
+  const handleRemoveEditItem = (index) => {
+    const updatedItems = editGrnItems.filter((_, i) => i !== index)
+    setEditGrnItems(updatedItems)
+    customToast('success', 'Item removed successfully')
+  }
+
+  const handleUpdateEditItem = (index) => {
+    const item = editGrnItems[index]
+    editForm.setFieldsValue({
+      selectedItem: item.itemId,
+      supplierName: item.supplier_name,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      invoiceNumber: item.invoiceNumber
+    })
+    
+    const updatedItems = editGrnItems.filter((_, i) => i !== index)
+    setEditGrnItems(updatedItems)
+  }
+
+  const handleUpdateGRN = async () => {
+    try {
+      const values = editForm.getFieldsValue()
+      
+      if (!values.invoiceNumber) {
+        customToast('error', 'Please enter invoice number')
+        return
+      }
+
+      if (editGrnItems.length === 0) {
+        customToast('error', 'Please add at least one item')
+        return
+      }
+
+      const updatedGrnData = {
+        id: editingGrn.id,
+        grnNumber: values.grnNumber,
+        invoiceNumber: values.invoiceNumber,
+        totalAmount: editGrandTotal,
+        createdAt: editingGrn.createdAt,
+        items: editGrnItems.map(item => ({
+          grnId: editingGrn.id,
+          itemId: item.itemId,
+          supplier_name: item.supplier_name,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          totalPrice: item.totalPrice,
+          invoiceNumber: item.invoiceNumber,
+          createdAt: item.createdAt
+        }))
+      }
+
+      const response = await axios.put(`http://localhost:8080/api/grn/${editingGrn.id}`, updatedGrnData)
+      customToast('success', 'GRN updated successfully')
+      setIsEditModalVisible(false)
+      setEditingGrn(null)
+      setEditGrnItems([])
+      setEditGrandTotal(0)
+      editForm.resetFields()
+      fetchAllGrns()
+    } catch (error) {
+      customToast('error', `Error updating GRN: ${error.message}`)
     }
   }
 
@@ -315,7 +455,7 @@ const page = () => {
 
   const clearFilters = () => {
     setSearchText('')
-    setSelectedDate(null) // Changed from dateRange to selectedDate
+    setSelectedDate(null)
     setCurrentPage(1)
   }
 
@@ -329,16 +469,10 @@ const page = () => {
 
   const nestedColumns = [
     {
-      title: 'Item Name',
-      dataIndex: 'itemName',
-      key: 'itemName',
+      title: 'Item Code',
+      dataIndex: 'itemCode',
+      key: 'itemCode',
       editable: true,
-    },
-    {
-      title: 'Item ID',
-      dataIndex: 'itemId',
-      key: 'itemId',
-      editable: false,
     },
     {
       title: 'Quantity',
@@ -356,14 +490,14 @@ const page = () => {
       title: 'Unit Price',
       dataIndex: 'unitPrice',
       key: 'unitPrice',
-      render: (price) => `LKR ${parseFloat(price || 0).toFixed(2)}`,
+      render: (value) => value ? value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "-",
       editable: true,
     },
     {
       title: 'Total Amount',
       dataIndex: 'totalAmount',
       key: 'totalAmount',
-      render: (amount, record) => `LKR ${parseFloat(amount || record.totalPrice || 0).toFixed(2)}`,
+      render: (value) => value ? value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "-",
       editable: true,
     }
   ];
@@ -387,42 +521,56 @@ const page = () => {
   // Main table columns
   const mainColumns = [
     {
-      title: 'GRN Number',
+      title: 'Purchase Number',
       dataIndex: 'grnNumber',
       key: 'grnNumber',
-      width: '20%',
+      width: '15%',
+    },
+    {
+      title: 'Invoice Number',
+      dataIndex: 'invoiceNumber',
+      key: 'invoiceNumber',
+      width: '15%',
     },
     {
       title: 'Created At',
       dataIndex: 'createdAt',
       key: 'createdAt',
-      width: '20%',
+      width: '15%',
     },
     {
       title: 'Total Amount',
       dataIndex: 'totalAmount',
       key: 'totalAmount',
-      width: '20%',
-      render: (amount) => `LKR ${parseFloat(amount || 0).toFixed(2)}`,
+      width: '15%',
+      render: (value) => value ? value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "-",
     },
     {
       title: 'Items Count',
       key: 'itemsCount',
-      width: '20%',
+      width: '15%',
       render: (_, record) => record.items?.length || 0,
     },
     {
       title: 'Action',
       key: 'action',
-      width: '20%',
+      width: '25%',
       render: (_, record) => (
-        <Button 
-          type="primary" 
-          danger
-          icon={<DeleteOutlined />} 
-          onClick={() => handleDeleteGrn(record.id)}
-          size="small"
-        />
+        <div className="flex gap-2">
+          {/* <Button 
+            type="primary" 
+            icon={<EditOutlined />} 
+            onClick={() => handleEditGrn(record)}
+            size="small"
+          /> */}
+          <Button 
+            type="primary" 
+            danger
+            icon={<DeleteOutlined />} 
+            onClick={() => handleDeleteGrn(record.id)}
+            size="small"
+          />
+        </div>
       ),
     }
   ];
@@ -448,24 +596,34 @@ const page = () => {
          <h1  className="text-2xl font-bold mb-6 w-full py-4 px-6 rounded-lg" 
           style={{  background: 'linear-gradient(90deg, #D4D2D2 0%, #665E5E 100%)',  color: '#515151' }}
          >
-            Good Receive Notice
+            Purchase Order
         </h1>
           {/* Form Section */}
- 
-       <div className="space-y-4 gap-5 flex w-full">
-        
-         <div className="flex w-full flex-col gap-1">
-           <label className='mb-1'>GRN Number</label>
+      <div className='space-y-4 flex flex-col w-[60%] bg-[#3D3B3B] px-8 py-8 rounded-lg'>
+       <div className="flex w-full flex-col gap-1">
+           <label className='mb-1 text-white'>Purchase Order Number</label>
              <input
                type="text"
-               placeholder="GRN Number"
+               placeholder="Purchase Order Number"
                disabled
                value={ grnNumber }
                className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-white"
              />
         </div>
+
         <div className="flex w-full flex-col gap-1">
-        <label className='mb-1'>Supplier Name</label>
+           <label className='mb-1 text-white'>Invoice Number *</label>
+             <input
+               type="text"
+               placeholder="Invoice Number"
+               onChange={(e)=> setInvoiceNumber(e.target.value)}
+               value={ invoiceNumber }
+               className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-white"
+               required
+             />
+        </div>
+        <div className="flex w-full flex-col gap-1">
+        <label className='mb-1 text-white'>Supplier Name</label>
         <input
           type="text"
           placeholder="Supplier Name"
@@ -473,25 +631,30 @@ const page = () => {
           value={ supplierName }
           className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-white"
          />
-    </div>
-</div>
+        </div>
 
-<div className="space-y-4 gap-5 flex w-full"> 
         <div className="flex w-full flex-col gap-1">
-          <label className='mb-1'>Select Item</label>
-          <select
-            value={selectedItem}
-            onChange={(e) => setSelectedItem(e.target.value)}
-            className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-white"
-          >
-            <option value="">Select an item</option>
-            {items.map((item) => (
-              <option key={item.id} value={item.id}>{item.itemBrand.brandName} - {item.itemCode}</option>
-            ))}
-          </select>
+          <label className='mb-1 text-white'>Select Item</label>
+          <Select
+      showSearch
+       size="large"
+      style={{ width: '100%' }}
+      placeholder="Select an item"
+      value={selectedItem || undefined}
+      onChange={(value) => handleSelectItem(value)}
+      optionFilterProp="label"
+      filterSort={(optionA, optionB) =>
+        (optionA?.label ?? '').toLowerCase().localeCompare((optionB?.label ?? '').toLowerCase())
+      }
+      options={items.map((item) => ({
+        value: item.id,
+        label: `${item.itemBrand.brandName} - ${item.itemCode}`,
+      }))}
+    />
+    
        </div>
        <div className="flex w-full flex-col gap-1">
-        <label className='mb-1'>Quantity</label>
+        <label className='mb-1 text-white'>Quantity</label>
        <input
          type="number"
          placeholder="Quantity" 
@@ -500,34 +663,49 @@ const page = () => {
          className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-white"
         />
    </div>
- 
-</div>
 
-<div className="space-y-4 gap-5 flex w-full"> 
 <div className="flex w-full flex-col gap-1">
-    <label className='mb-1'>Item Unit Price</label>
-       <input
-         type="number"
-         step="0.01"
-         placeholder="Item Unit Price" 
-         onChange={(e) => setItemUnitPrice(e.target.value)}
-         value={ itemUnitPrice }
-         className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-white"
-        />
+    <label className='mb-1 text-white'>Item Unit Price</label>
+    <InputNumber
+        value={ itemUnitPrice }
+        onChange={(value) => setItemUnitPrice(value)}
+        formatter={(value) => value?.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") }
+        parser={(value) => value.replace(/\$\s?|(,*)/g, "")}
+        placeholder="Item Unit Price" 
+        className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-white"
+        style={{
+            width: "100%", 
+            height: 48,
+            borderRadius: 12,
+            fontFamily: "Poppins, sans-serif",
+            fontSize: 16 }}
+        inputStyle={{
+            fontFamily: "Poppins, sans-serif",
+            fontSize: 16,
+           }}
+      />
    </div>
        <div className="flex w-full flex-col gap-1">
-        <label className='mb-1'>Total Price</label>
-       <input
-         type="number"
-         step="0.01"
-         placeholder="Total Price" 
-         value={ totalPrice }
-         disabled
-         className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-gray-100"
-        />
+        <label className='mb-1 text-white'>Total Price</label>
+        <InputNumber
+        value={ totalPrice }
+        placeholder="Total Price" 
+        readOnly={true}
+        formatter={(value) => value?.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") }
+        parser={(value) => value.replace(/\$\s?|(,*)/g, "")}
+        className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-white"
+        style={{
+            width: "100%", 
+            height: 48,
+            borderRadius: 12,
+            fontFamily: "Poppins, sans-serif",
+            fontSize: 16 }}
+            inputStyle={{
+            fontFamily: "Poppins, sans-serif",
+            fontSize: 16,
+           }}
+          />
    </div>
- 
-</div>
 
 {/* Action Buttons */}
 <div className="flex gap-4 mt-6">
@@ -546,11 +724,12 @@ const page = () => {
     Add Item
   </button>
 </div>
+</div>
 
 {/* Items Table */}
 {grnItems.length > 0 && (
   <div className="mt-8">
-    <h2 className="text-xl font-semibold mb-4">Added Items</h2>
+    <h2 className="text-xl font-semibold text-white mb-4">Added Items</h2>
     <div className="overflow-x-auto">
       <table className="w-full bg-white rounded-lg shadow-md">
         <thead className="bg-gray-50">
@@ -560,6 +739,7 @@ const page = () => {
             <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Quantity</th>
             <th className="px-4 py-3 text-right text-sm font-medium text-gray-900">Unit Price</th>
             <th className="px-4 py-3 text-right text-sm font-medium text-gray-900">Total Price</th>
+            <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Invoice No</th>
             <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Actions</th>
           </tr>
         </thead>
@@ -571,6 +751,7 @@ const page = () => {
               <td className="px-4 py-3 text-sm text-gray-900 text-center">{item.quantity}</td>
               <td className="px-4 py-3 text-sm text-gray-900 text-right">{item.unitPrice.toFixed(2)}</td>
               <td className="px-4 py-3 text-sm text-gray-900 text-right">{item.totalPrice.toFixed(2)}</td>
+              <td className="px-4 py-3 text-sm text-gray-900">{item.invoiceNumber}</td>
               <td className="px-4 py-3 text-sm text-gray-900 text-center">
                 <div className="flex justify-center gap-2">
                   <button
@@ -594,7 +775,7 @@ const page = () => {
         </tbody>
         <tfoot className="bg-gray-50">
           <tr>
-            <td colSpan="4" className="px-4 py-3 text-right font-semibold text-gray-900">Grand Total:</td>
+            <td colSpan="5" className="px-4 py-3 text-right font-semibold text-gray-900">Grand Total:</td>
             <td className="px-4 py-3 text-right font-bold text-gray-900">{grandTotal.toFixed(2)}</td>
             <td></td>
           </tr>
@@ -622,20 +803,196 @@ const page = () => {
   </button>
 </div> }
 
+{/* Edit GRN Modal */}
+<Modal
+  title="Edit GRN"
+  open={isEditModalVisible}
+  onCancel={handleEditModalCancel}
+  width={1200}
+  footer={null}
+  className="edit-grn-modal"
+>
+  <Form
+    form={editForm}
+    layout="vertical"
+    onFinish={handleAddEditItem}
+    className="space-y-4"
+  >
+    <div className="grid grid-cols-2 gap-4 mb-6">
+      <Form.Item
+        label="GRN Number"
+        name="grnNumber"
+      >
+        <Input disabled />
+      </Form.Item>
+      
+      <Form.Item
+        label="Invoice Number"
+        name="invoiceNumber"
+        rules={[{ required: true, message: 'Please enter invoice number!' }]}
+      >
+        <Input placeholder="Invoice Number" />
+      </Form.Item>
+    </div>
+
+    <div className="bg-gray-50 p-4 rounded-lg">
+      <h3 className="text-lg font-semibold mb-4">Add/Edit Items</h3>
+      
+      <div className="grid grid-cols-2 gap-4 mb-4">
+        <Form.Item
+          label="Select Item"
+          name="selectedItem"
+          rules={[{ required: true, message: 'Please select an item!' }]}
+        >
+          <Select
+            showSearch
+            placeholder="Select an item"
+            optionFilterProp="label"
+            options={items.map((item) => ({
+              value: item.id,
+              label: `${item.itemBrand.brandName} - ${item.itemCode}`,
+            }))}
+          />
+        </Form.Item>
+
+        <Form.Item
+          label="Supplier Name"
+          name="supplierName"
+          rules={[{ required: true, message: 'Please enter supplier name!' }]}
+        >
+          <Input placeholder="Supplier Name" />
+        </Form.Item>
+
+        <Form.Item
+          label="Quantity"
+          name="quantity"
+          rules={[{ required: true, message: 'Please enter quantity!' }]}
+        >
+          <InputNumber
+            min={1}
+            placeholder="Quantity"
+            style={{ width: '100%' }}
+          />
+        </Form.Item>
+
+        <Form.Item
+          label="Unit Price"
+          name="unitPrice"
+          rules={[{ required: true, message: 'Please enter unit price!' }]}
+        >
+          <InputNumber
+            min={0}
+            step={0.01}
+            placeholder="Unit Price"
+            style={{ width: '100%' }}
+            formatter={(value) => value?.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
+            parser={(value) => value.replace(/\$\s?|(,*)/g, "")}
+          />
+        </Form.Item>
+
+        <Form.Item
+          label="Invoice Number for Item"
+          name="invoiceNumber"
+          rules={[{ required: true, message: 'Please enter invoice number for this item!' }]}
+        >
+          <Input placeholder="Invoice Number" />
+        </Form.Item>
+      </div>
+
+      <Button type="primary" htmlType="submit" className="bg-[#FC890D] hover:bg-[#FD9A2E]">
+        Add Item
+      </Button>
+    </div>
+
+    {/* Edit Items Table */}
+    {editGrnItems.length > 0 && (
+      <div className="mt-6">
+        <h4 className="text-md font-semibold mb-4">Items in GRN</h4>
+        <div className="overflow-x-auto">
+          <table className="w-full bg-white rounded-lg shadow-md border">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Item</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Supplier</th>
+                <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Quantity</th>
+                <th className="px-4 py-3 text-right text-sm font-medium text-gray-900">Unit Price</th>
+                <th className="px-4 py-3 text-right text-sm font-medium text-gray-900">Total Price</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Invoice No</th>
+                <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {editGrnItems.map((item, index) => (
+                <tr key={index} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 text-sm text-gray-900">{item.itemName}</td>
+                  <td className="px-4 py-3 text-sm text-gray-900">{item.supplier_name}</td>
+                  <td className="px-4 py-3 text-sm text-gray-900 text-center">{item.quantity}</td>
+                  <td className="px-4 py-3 text-sm text-gray-900 text-right">{item.unitPrice.toFixed(2)}</td>
+                  <td className="px-4 py-3 text-sm text-gray-900 text-right">{item.totalPrice.toFixed(2)}</td>
+                  <td className="px-4 py-3 text-sm text-gray-900">{item.invoiceNumber}</td>
+                  <td className="px-4 py-3 text-sm text-gray-900 text-center">
+                    <div className="flex justify-center gap-2">
+                      <button
+                        onClick={() => handleUpdateEditItem(index)}
+                        className="text-blue-600 hover:text-blue-800 p-1"
+                        title="Edit"
+                      >
+                        <EditOutlined />
+                      </button>
+                      <button
+                        onClick={() => handleRemoveEditItem(index)}
+                        className="text-red-600 hover:text-red-800 p-1"
+                        title="Remove"
+                      >
+                        <DeleteOutlined />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot className="bg-gray-50">
+              <tr>
+                <td colSpan="5" className="px-4 py-3 text-right font-semibold text-gray-900">Grand Total:</td>
+                <td className="px-4 py-3 text-right font-bold text-gray-900">{editGrandTotal.toFixed(2)}</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    )}
+
+    <div className="flex justify-end gap-4 mt-6 pt-4 border-t">
+      <Button onClick={handleEditModalCancel}>
+        Cancel
+      </Button>
+      <Button 
+        type="primary" 
+        onClick={handleUpdateGRN}
+        className="bg-[#FC890D] hover:bg-[#FD9A2E]"
+        disabled={editGrnItems.length === 0}
+      >
+        Update GRN
+      </Button>
+    </div>
+  </Form>
+</Modal>
+
 {/* Updated Filter Section with Single Date */}
 <div className="mt-12 mb-6">
   <div className="bg-white p-6 rounded-lg shadow-md">
-    <h3 className="text-lg font-semibold mb-4">Filter GRNs</h3>
+    <h3 className="text-lg font-semibold mb-4">Filter Purchase Orders</h3>
     <div className="flex flex-wrap gap-4 items-end">
-      {/* Search by GRN Number */}
+      {/* Search by GRN Number or Invoice Number */}
       <div className="flex flex-col">
-        <label className="mb-2 text-sm font-medium text-gray-700">Search by GRN Number</label>
+        <label className="mb-2 text-sm font-medium text-gray-700">Search by GRN/Invoice Number</label>
         <Input.Search
-          placeholder="Enter GRN Number"
+          placeholder="Enter GRN or Invoice Number"
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
           onSearch={handleSearch}
-          style={{ width: 250 }}
+          style={{ width: 300 }}
           prefix={<SearchOutlined />}
           allowClear
         />
@@ -680,7 +1037,7 @@ const page = () => {
 
 {/* All GRNs Expandable Table with Enhanced Pagination */}
 <div className="mt-6">
-  <h2 className="text-xl font-bold mb-4">All GRNs</h2>
+  <h2 className="text-xl font-bold text-white mb-4">All GRNs</h2>
   <Table 
     columns={mainColumns}
     dataSource={filteredGrns}
@@ -720,3 +1077,4 @@ const page = () => {
 }
 
 export default page
+

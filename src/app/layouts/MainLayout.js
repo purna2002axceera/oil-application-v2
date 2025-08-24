@@ -10,10 +10,9 @@ export default function MainLayout({ children }) {
   const pathname = usePathname();
 
   const navLinks = [
-    { name: 'Dashboard', path: '/' },
     { name: 'Item Master', path: '/item-master' },
-    { name: 'Good Receive Notice', path: '/grn' },
-    { name: 'Sales', path: '/sales' },
+    { name: 'Purchase Order', path: '/grn' },
+    { name: 'Sales Order', path: '/sales' },
     { name: 'Logout', path: '/logout' }
   ];
 
@@ -44,7 +43,7 @@ export default function MainLayout({ children }) {
         </div>
       </aside>
 
-      <main className="flex-1 p-6 bg-gray-100 overflow-auto">{ children }</main>
+      <main className="flex-1 p-6 bg-[#1F1C1C] overflow-auto">{ children }</main>
 
       <ToastContainer />
     </div>

@@ -4,14 +4,12 @@ import { customToast } from '../utils/toast';
 
 const CreateCustomer = ({fetchCustomers, setCreateCustomer}) => {
   const [customerName, setCustomerName] = useState('');
-  const [customerAddress, setCustomerAddress] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
-  const [customerNic, setCustomerNic] = useState('');
   const [error, setError] = useState('');
 
   const generateCustomerNumber = () => {
-    const timestamp = Date.now();
-    return `CUST${timestamp.toString().slice(-6)}`;
+    const firstName = customerName.split(' ')[0]
+    return `${firstName}_${customerPhone}`;
   };
 
   const handleCreateCustomer = async () => {
@@ -30,11 +28,9 @@ const CreateCustomer = ({fetchCustomers, setCreateCustomer}) => {
 
     try {
       const customerData = {
-        customerNo: generateCustomerNumber(),
+        customerCode: generateCustomerNumber(),
         customerName: customerName.trim(),
-        customerAddress: customerAddress.trim() || '',
         customerPhone: customerPhone.trim(),
-        customerNic: customerNic.trim() || '',
         createdAt: new Date().toISOString()
       };
 
@@ -79,28 +75,12 @@ const CreateCustomer = ({fetchCustomers, setCreateCustomer}) => {
             onChange={(e) => setCustomerName(e.target.value)}
             className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0"
           />
-          
-          <input
-            type="text"
-            placeholder="Enter Customer Address"
-            value={customerAddress}
-            onChange={(e) => setCustomerAddress(e.target.value)}
-            className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0"
-          />
-          
+        
           <input
             type="text"
             placeholder="Enter Customer Phone *"
             value={customerPhone}
             onChange={(e) => setCustomerPhone(e.target.value)}
-            className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0"
-          />
-          
-          <input
-            type="text"
-            placeholder="Enter Customer NIC"
-            value={customerNic}
-            onChange={(e) => setCustomerNic(e.target.value)}
             className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0"
           />
           

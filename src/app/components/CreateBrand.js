@@ -51,7 +51,7 @@ const CreateBrand = ({fetchBrands, setCreateBrand}) => {
 
   return (
     <div className="fixed inset-0 bg-black flex items-center justify-center z-50" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
-      <div className="bg-white rounded-lg p-6 shadow-xl max-w-md w-full mx-4">
+      <div className=" rounded-lg p-6 shadow-xl max-w-md w-full mx-4 bg-[#ccc]">
         <h1 className="text-2xl font-bold mb-6">Add New Brand</h1>
         
         <div className="space-y-4">
@@ -60,7 +60,7 @@ const CreateBrand = ({fetchBrands, setCreateBrand}) => {
             placeholder="Enter Brand Name"
             value={brandName}
             onChange={(e) => setBrandName(e.target.value)}
-            className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0"
+            className="w-full px-4 py-3 rounded-lg shadow-md bg-white focus:outline-none focus:ring-0 border-0"
           />
           
           {error && (

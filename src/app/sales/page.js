@@ -7,7 +7,10 @@ import { DeleteOutlined, EditOutlined } from '@ant-design/icons'
 import { customToast } from '../utils/toast'
 import { Table, Button, Form, Input, InputNumber, Popconfirm, Typography, Select } from 'antd'
 import CreateCustomer from '../components/CreateCustomer'
+import quantityCalculator from '../utils/quantityCalculator'
 
+
+const { Option } = Select
 const EditableCell = ({
   editing,
   dataIndex,
@@ -26,11 +29,8 @@ const EditableCell = ({
         <Form.Item
           name={dataIndex}
           style={{ margin: 0 }}
-          rules={[
-            {
-              required: true,
-              message: `Please Input ${title}!`,
-            },
+          rules={[ { required: true,
+                     message: `Please Input ${title}!` }
           ]}
         >
           {inputNode}
@@ -51,6 +51,10 @@ const page = () => {
     const [quantity, setQuantity] = useState('')
     const [selectedItem, setSelectedItem] = useState('')
     const [itemUnitPrice, setItemUnitPrice] = useState('')
+    const [isLoose, setIsLoose] = useState(false)
+    const [looseInLiters,setLooseInLiters ] = useState('')
+    const [looseInMili,setLooseInMili] = useState('')
+    const [orderType,setOrderType] = useState('')
     const [totalPrice, setTotalPrice] = useState('')
     const [note, setNote] = useState('')
     const [salesItems, setSalesItems] = useState([])
@@ -177,7 +181,6 @@ const page = () => {
           }
         })
       );
-      
       console.log('Sales with customer names:', salesWithCustomerNames)
       setAllSales(salesWithCustomerNames);
       console.log('All Sales:', data)
@@ -202,7 +205,10 @@ const page = () => {
   }, [salesItems])
 
   const autoCalculateTotalPrice = () => {
-    if (quantity && itemUnitPrice) {
+    if ( isLoose && itemUnitPrice ){
+      setTotalPrice(parseFloat(itemUnitPrice))
+    } 
+    else if (!isLoose && quantity && itemUnitPrice) {
       setTotalPrice(parseFloat(quantity) * parseFloat(itemUnitPrice))
     } else {
       setTotalPrice('')
@@ -226,6 +232,9 @@ const page = () => {
     setItemUnitPrice('')
     setTotalPrice('')
     setNote('')
+    setIsLoose(false)
+    setLooseInLiters('')
+    setLooseInMili('')
   }
 
   const resetAll = () => {
@@ -235,23 +244,61 @@ const page = () => {
     getCurrentSalesNumber()
   }
 
+  const handleSelectItem = (value) =>{
+    console.log(value);
+    setSelectedItem(value)
+  }
+
   const handleAddItem = () => {
-    if (!selectedItem || !customerName || !quantity || !itemUnitPrice) {
+    console.log(selectedItem, itemUnitPrice);
+    
+    if (!selectedItem || !itemUnitPrice) {
       customToast('error', 'Please fill all fields')
       return
     }
 
-    const selectedCustomer = customers.find(customer => customer.id === parseInt(customerName))
+    if (isLoose) {
+      if (!looseInMili || isNaN(looseInMili) || looseInMili <= 0) {
+        customToast('error', 'Please enter amount in milliliters')
+        return
+      }
+    } else {
+      if (!quantity || isNaN(quantity) || quantity <= 0) {
+        customToast('error', 'Please enter quantity')
+        return
+      }
+    }
+
+    let selectedCustomer = null;
+    if (customerName) {
+      selectedCustomer = customers.find(customer => customer.id === parseInt(customerName));
+    }
+
+    // For loose, calculate liters
+    let quantityMilliliters = null;
+    let quantityLiters = null;
+    if ( isLoose ) {
+      quantityMilliliters = parseInt(looseInMili);
+      quantityLiters = parseFloat((quantityMilliliters / 1000).toFixed(3));
+    }
+
+    if( quantity && !isLoose ){
+      var response =  quantityCalculator( quantity, getItemName(selectedItem) )
+     }
     
+
     const newItem = {
       itemId: parseInt(selectedItem),
       itemName: getItemName(selectedItem),
       customer_name: selectedCustomer?.customerName || '',
-      quantity: parseInt(quantity),
+      isLoose: Boolean(isLoose),
+      quantity: isLoose ? '' : parseInt(quantity),
+      quantityMilliliters: quantity && !isLoose ? response?.quantityInMili : quantityMilliliters,
+      quantityLiters:  0,
       unitPrice: parseFloat(itemUnitPrice),
       totalPrice: parseFloat(totalPrice),
       createdAt: new Date().toISOString().slice(0, 19)
-    }
+    };
 
     const existingItem = salesItems.find(item => item.itemId === parseInt(selectedItem))
     if (existingItem) {
@@ -259,10 +306,8 @@ const page = () => {
       return
     }
 
-    // Always add as new item since update removes the original from table
     setSalesItems([...salesItems, newItem])
     customToast('success', 'Item added successfully')
-
     resetForm()
   }
 
@@ -273,14 +318,18 @@ const page = () => {
   }
 
   const handleUpdateItem = (index) => {
-    const item = salesItems[index]
-    setSelectedItem(item.itemId.toString())
     
+    const item = salesItems[index]
+    
+    setSelectedItem(item.itemId.toString())
+   
     // Find customer by name to set the correct customer ID
     const customer = customers.find(c => c.customerName === item.customer_name)
     setCustomerName(customer ? customer.id.toString() : '')
-    
-    setQuantity(item.quantity.toString())
+    setLooseInLiters(item?.quantityLiters)
+    setLooseInMili(item?.quantityMilliliters)
+    setIsLoose(Boolean(item?.isLoose))
+    setQuantity(item?.quantity?.toString())
     setItemUnitPrice(item.unitPrice.toString())
     setTotalPrice(item.totalPrice.toString())
     
@@ -289,7 +338,6 @@ const page = () => {
     setSalesItems(updatedItems)
   }
 
-  
 
   const handleCreateSale = async () => {
   if (salesItems.length === 0) {
@@ -300,22 +348,21 @@ const page = () => {
   // Get the customer ID from the first item (assuming all items have the same customer)
   const firstItem = salesItems[0]
   const selectedCustomer = customers.find(customer => customer.customerName === firstItem.customer_name)
-  
-  if (!selectedCustomer) {
-    customToast('error', 'Customer not found')
-    return
-  }
+
 
   const salesData = {
     salesOrderNo: salesNumber,
-    salesOrderType: "RETAIL",
+    salesOrderType: orderType,
     totalAmount: parseFloat(grandTotal), // Ensure it's a number
-    customerId: parseInt(selectedCustomer.id), // Ensure it's a number
+    customerId: parseInt(selectedCustomer?.id || null), // Ensure it's a number
     note: note || "",
     createdAt: new Date().toISOString(),
     items: salesItems.map(item => ({
       itemId: parseInt(item.itemId), // Ensure it's a number
-      quantity: parseInt(item.quantity), // Ensure it's a number
+      quantity: parseInt(item?.quantity || null), // Ensure it's a number
+      quantityLiters: parseFloat(item?.quantityLiters || null),
+      isLoose: item?.isLoose,
+      quantityMilliliters: parseInt(item?.quantityMilliliters || null),
       soItemUnitPrice: parseFloat(item.unitPrice), // Ensure it's a number
       soItemTotalAmount: parseFloat(item.totalPrice), // Ensure it's a number
       createdAt: new Date().toISOString()
@@ -338,8 +385,6 @@ const page = () => {
     customToast('error', `Error creating sale: ${error.response?.data?.message || error.message}`)
   }
 }
-
-
 
   const handleDeleteSale = async (salesId) => {
     try {
@@ -367,37 +412,61 @@ const page = () => {
 
   const nestedColumns = [
     {
-      title: 'Item Name',
-      dataIndex: 'itemName',
-      key: 'itemName',
-      editable: true,
-    },
-    {
-      title: 'Item ID',
+      title: 'Item Code',
       dataIndex: 'itemId',
       key: 'itemId',
-      editable: false,
+      render: (code) => {
+        const itemSelected = items.find((item)=>item.id === code)
+        return itemSelected.itemCode;
+      },
+      editable: true,
     },
     {
       title: 'Quantity',
       dataIndex: 'quantity',
       key: 'quantity',
+      render: (quantity) => quantity ? quantity : 'N/A',
       editable: true,
     },
     {
-      title: 'Unit Price',
-      dataIndex: 'unitPrice',
-      key: 'unitPrice',
-      render: (price) => `LKR ${parseFloat(price || 0).toFixed(2)}`,
+  title: 'Quantity ML',
+  dataIndex: 'quantityMilliliters',
+  key: 'quantity',
+  render: (qty) =>
+   qty ? `${parseFloat(qty || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : 'N/A',
+  editable: true,
+},
+      {
+      title: 'Quantity L',
+      dataIndex: 'quantityMilliliters',
+      key: 'quantityMilliliters',
+      render: (quantity) => quantity ? quantity/1000 : 'N/A',
       editable: true,
     },
     {
-      title: 'Total Amount',
-      dataIndex: 'totalAmount',
-      key: 'totalAmount',
-      render: (amount, record) => `LKR ${parseFloat(amount || record.totalPrice || 0).toFixed(2)}`,
+      title: 'Is Loose',
+      dataIndex: 'isLoose',
+      key: 'isLoose',
+      render: (value) => value === true ? 'Yes' : 'No',
       editable: true,
-    }
+    },
+ {
+  title: 'Unit Price',
+  dataIndex: 'unitPrice',
+  key: 'unitPrice',
+  render: (price) => 
+    `${parseFloat(price || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+  editable: true,
+},
+{
+  title: 'Total Amount',
+  dataIndex: 'totalAmount',
+  key: 'totalAmount',
+  render: (amount, record) => 
+    `${parseFloat(amount || record.totalPrice || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+  editable: true,
+}
+
   ];
 
   const mergedNestedColumns = nestedColumns.map((col) => {
@@ -422,7 +491,7 @@ const page = () => {
       title: 'Sales Order No',
       dataIndex: 'salesNumber',
       key: 'salesNumber',
-      width: '20%',
+      width: '16%',
     },
     {
       title: 'Order Type',
@@ -441,16 +510,16 @@ const page = () => {
       dataIndex: 'totalAmount',
       key: 'totalAmount',
       width: '15%',
-      render: (amount) => `LKR ${parseFloat(amount || 0).toFixed(2)}`,
+      render: (amount) => `${parseFloat(amount || 0).toFixed(2)}`,
     },
     {
-      title: 'Customer Name',
+      title: 'Customer',
       dataIndex: 'customerName',
       key: 'customerName',
       width: '15%',
     },
     {
-      title: 'Items Count',
+      title: 'Count',
       key: 'itemsCount',
       width: '10%',
       render: (_, record) => record.items?.length || 0,
@@ -492,14 +561,12 @@ const page = () => {
          <h1  className="text-2xl font-bold mb-6 w-full py-4 px-6 rounded-lg" 
           style={{  background: 'linear-gradient(90deg, #D4D2D2 0%, #665E5E 100%)',  color: '#515151' }}
          >
-            Sales
+            Sales Order
         </h1>
           {/* Form Section */}
- 
-       <div className="space-y-4 gap-5 flex w-full">
-        
+        <div className='flex flex-col w-[60%] bg-[#3D3B3B] gap-2 px-8 py-8 rounded-lg'>
          <div className="flex w-full flex-col gap-1">
-           <label className='mb-1'>Sales Number</label>
+           <label className='mb-1 text-white'>Sales Number</label>
              <input
                type="text"
                placeholder="Sales Number"
@@ -508,16 +575,29 @@ const page = () => {
                className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-white"
              />
         </div>
-        <div className="flex w-full flex-col gap-1">
-        <label className='mb-1'>Customer Name</label>
+         <div className='flex flex-col h-[80px] gap-1'>
+      <label className="mb-1 block text-white">Select Order Type</label>
+      <Select
+        placeholder="Choose Order Type"
+        style={{ flex: 1, height: 48, borderRadius: 9, background: '#fff', fontFamily:'Poppins', width:'100%' }}
+        dropdownStyle={{ borderRadius: 8, background: '#fff', padding: 8 }}
+        value={orderType || undefined} 
+        onChange={(value) => setOrderType(value)}
+      >
+        <Option value="CASH">CASH</Option>
+        <Option value="CREDIT">CREDIT</Option>
+      </Select>
+    </div>
+      { orderType !== 'CASH' && <div className="flex w-full flex-col h-[80px] gap-1">
+        <label className='mb-1 text-white'>Credit Customer</label>
         <div className="flex items-center gap-2 space-x-2">
             <Select
               value={customerName || undefined}
               onChange={(value) => setCustomerName(value)}
               placeholder="Select Customer"
               className='!shadow-md border-0'
-              style={{ flex: 1, height: 48, borderRadius: 9, background: '#fff', boxShadow: '0 2px 8px #f0f1f2', fontFamily:'Poppins' }}
-              dropdownStyle={{ borderRadius: 8, background: '#fff', boxShadow: '0 2px 8px #f0f1f2', padding: 8 }}
+              style={{ flex: 1, height: 48, borderRadius: 9, background: '#fff', fontFamily:'Poppins' }}
+              dropdownStyle={{ borderRadius: 8, background: '#fff', padding: 8 }}
             >
               {customers.length === 0 && (
                 <Select.Option disabled key="no-customers">No Customers</Select.Option>
@@ -525,7 +605,7 @@ const page = () => {
               {customers.map((customer) => (
                 <Select.Option value={customer.id.toString()} key={customer.id} className="custom-ant-option">
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontFamily:'Poppins' }}>
-                    <span>{customer.customerName}</span>
+                    <span>{customer.customerCode.toUpperCase()}</span>
                     <DeleteOutlined
                       onClick={e => { e.stopPropagation(); handleDeleteCustomer(customer.id) }}
                       style={{ color: 'red', marginLeft: 8 }}
@@ -545,26 +625,40 @@ const page = () => {
             )}
 
           </div>
-    </div>
-    
-</div>
+    </div>}
 
-<div className="space-y-4 gap-5 flex w-full"> 
-        <div className="flex w-full flex-col gap-1">
-          <label className='mb-1'>Select Item</label>
-          <select
-            value={selectedItem}
-            onChange={(e) => setSelectedItem(e.target.value)}
-            className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-white"
-          >
-            <option value="">Select an item</option>
-            {items.map((item) => (
-              <option key={item.id} value={item.id}>{item.itemBrand.brandName} - {item.itemCode}</option>
-            ))}
-          </select>
+        <div className="flex w-full h-[80px] flex-col gap-1">
+          <label className='mb-1 text-white'>Select Item</label>
+           <Select
+               showSearch
+                size="large"
+              style={{ flex: 1, height: 48, borderRadius: 9, background: '#fff', fontFamily:'Poppins' }}
+               placeholder="Select an item"
+               dropdownStyle={{ borderRadius: 8, background: '#fff', padding: 8 }}
+               value={selectedItem || undefined}
+               onChange={(value) => handleSelectItem(value)}
+               optionFilterProp="label"
+               filterSort={(optionA, optionB) =>
+                 (optionA?.label ?? '').toLowerCase().localeCompare((optionB?.label ?? '').toLowerCase())
+               }
+               options={items.map((item) => ({
+                 value: item.id,
+                 label: `${item.itemBrand.brandName} - ${item.itemCode}`,
+               }))}
+             />
        </div>
-       <div className="flex w-full flex-col gap-1">
-        <label className='mb-1'>Quantity</label>
+    <div className="flex items-center gap-2 py-4">
+        <input
+          type="checkbox"
+          checked={isLoose}
+          onChange={(e) => setIsLoose(e.target.checked)}
+          className="h-5 w-5 cursor-pointer"
+        />
+        <label className="text-white cursor-pointer">Is Loose</label>
+      </div>
+       { !isLoose && (
+         <div className="flex w-full flex-col gap-1">
+        <label className='mb-1 text-white'>Quantity</label>
        <input
          type="number"
          placeholder="Quantity" 
@@ -572,39 +666,84 @@ const page = () => {
          value={ quantity }
          className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-white"
         />
-   </div>
- 
-</div>
+    </div>
+       )
+       
+       }
 
-<div className="space-y-4 gap-5 flex w-full"> 
+       { isLoose && (
+        <div className="flex w-full flex-col gap-1">
+        <label className='mb-1 text-white'>Quantity In Millilitres</label>
+         <InputNumber
+                value={ looseInMili }
+                onChange={(value) => setLooseInMili(value)}
+                formatter={(value) => value?.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") }
+                parser={(value) => value.replace(/\$\s?|(,*)/g, "")}
+                placeholder="Millilitres" 
+                className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-white"
+                style={{
+                    width: "100%", 
+                    height: 48,
+                    borderRadius: 12,
+                    fontFamily: "Poppins, sans-serif",
+                    fontSize: 16 }}
+                inputStyle={{
+                    fontFamily: "Poppins, sans-serif",
+                    fontSize: 16,
+                   }}
+              />
+
+      </div>
+       )
+       }
+
+    
+ 
 <div className="flex w-full flex-col gap-1">
-    <label className='mb-1'>Item Unit Price</label>
-       <input
-         type="number"
-         step="0.01"
-         placeholder="Item Unit Price" 
-         onChange={(e) => setItemUnitPrice(e.target.value)}
-         value={ itemUnitPrice }
-         className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-white"
-        />
+    <label className='mb-1 text-white'>Item Unit Price</label>
+             <InputNumber
+                value={ itemUnitPrice }
+                onChange={(value) => setItemUnitPrice(value)}
+                formatter={(value) => value?.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") }
+                parser={(value) => value.replace(/\$\s?|(,*)/g, "")}
+                 placeholder="Item Unit Price" 
+                className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-white"
+                style={{
+                    width: "100%", 
+                    height: 48,
+                    borderRadius: 12,
+                    fontFamily: "Poppins, sans-serif",
+                    fontSize: 16 }}
+                inputStyle={{
+                    fontFamily: "Poppins, sans-serif",
+                    fontSize: 16,
+                   }}
+              />
    </div>
        <div className="flex w-full flex-col gap-1">
-        <label className='mb-1'>Total Price</label>
-       <input
-         type="number"
-         step="0.01"
-         placeholder="Total Price" 
-         value={ totalPrice }
-         disabled
-         className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-gray-100"
-        />
+        <label className='mb-1 text-white'>Total Price</label>
+               <InputNumber
+                value={ totalPrice }
+                formatter={(value) => value?.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") }
+                parser={(value) => value.replace(/\$\s?|(,*)/g, "")}
+                readOnly
+                placeholder="Total Price"  
+                className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-white"
+                style={{
+                    width: "100%", 
+                    height: 48,
+                    borderRadius: 12,
+                    fontFamily: "Poppins, sans-serif",
+                    fontSize: 16 }}
+                inputStyle={{
+                    fontFamily: "Poppins, sans-serif",
+                    fontSize: 16,
+                   }}
+              />
    </div>
- 
-</div>
 
-<div className="space-y-4 gap-5 flex w-full">
 <div className="flex w-full flex-col gap-1">
-    <label className='mb-1'>Note (Optional)</label>
+    <label className='mb-1 text-white'>Note (Optional)</label>
        <textarea
          placeholder="Notes..."
          onChange={(e) => setNote(e.target.value)}
@@ -613,9 +752,6 @@ const page = () => {
          className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-white resize-none"
         />
    </div>
-   <div className="flex w-full flex-col gap-1">
-   </div>
-</div>
 
 {/* Action Buttons */}
 <div className="flex gap-4 mt-6">
@@ -634,11 +770,12 @@ const page = () => {
     Add Item
   </button>
 </div>
+</div>
 
 {/* Items Table */}
 {salesItems.length > 0 && (
   <div className="mt-8">
-    <h2 className="text-xl font-semibold mb-4">Added Items</h2>
+    <h2 className="text-xl font-semibold mb-4 text-white">Added Items</h2>
     <div className="overflow-x-auto">
       <table className="w-full bg-white rounded-lg shadow-md">
         <thead className="bg-gray-50">
@@ -646,6 +783,8 @@ const page = () => {
             <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Item</th>
             <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Customer</th>
             <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Quantity</th>
+            <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Quantity ML</th>
+            <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Quantity L</th>
             <th className="px-4 py-3 text-right text-sm font-medium text-gray-900">Unit Price</th>
             <th className="px-4 py-3 text-right text-sm font-medium text-gray-900">Total Price</th>
             <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Actions</th>
@@ -657,6 +796,8 @@ const page = () => {
               <td className="px-4 py-3 text-sm text-gray-900">{item.itemName}</td>
               <td className="px-4 py-3 text-sm text-gray-900">{item.customer_name}</td>
               <td className="px-4 py-3 text-sm text-gray-900 text-center">{item.quantity}</td>
+              <td className="px-4 py-3 text-sm text-gray-900 text-center">{item.quantityMilliliters}</td>
+              <td className="px-4 py-3 text-sm text-gray-900 text-center">{item.quantityLiters}</td>
               <td className="px-4 py-3 text-sm text-gray-900 text-right">{item.unitPrice.toFixed(2)}</td>
               <td className="px-4 py-3 text-sm text-gray-900 text-right">{item.totalPrice.toFixed(2)}</td>
               <td className="px-4 py-3 text-sm text-gray-900 text-center">
@@ -712,7 +853,7 @@ const page = () => {
 
 {/* All Sales Expandable Table */}
 <div className="mt-12">
-  <h2 className="text-xl font-bold mb-4">All Sales</h2>
+  <h2 className="text-xl font-bold mb-4 text-white">All Sales</h2>
   <Table 
     columns={mainColumns}
     dataSource={allSales}
