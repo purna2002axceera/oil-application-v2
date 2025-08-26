@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Table, Button, Popconfirm, InputNumber, Select } from 'antd';
 import { EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import axios from 'axios';
@@ -23,6 +23,7 @@ export default function ItemMaster() {
   const [showCreateBrand, setCreateBrand] = useState(false);
   const [isUpdateMode, setIsUpdateMode] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -33,10 +34,112 @@ export default function ItemMaster() {
   const [sortBy, setSortBy] = useState('id');
   const [sortDir, setSortDir] = useState('DESC');
 
-  useEffect(() => {
-    fetchBrands();
-    fetchItems(currentPage, pageSize);
+  // Memoized fetch function to prevent unnecessary re-renders
+  const fetchItems = useCallback(async (
+  page = currentPage || 1,
+  size = pageSize || 6,
+  sortField = sortBy || 'id',
+  sortDirection = sortDir || 'DESC'
+) => {
+  try {
+    setLoading(true);
+    // Ensure all params are numbers/strings, not undefined
+    const safePage = page || 1;
+    const safeSize = size || 6;
+    const safeSortField = sortField || 'id';
+    const safeSortDirection = sortDirection || 'DESC';
+
+    console.log('Fetching items with params:', { safePage, safeSize, safeSortField, safeSortDirection });
+
+    const response = await fetch(
+      `http://localhost:8080/api/item/paginated?page=${safePage}&size=${safeSize}&sortBy=${safeSortField}&sortDir=${safeSortDirection}`,
+      {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+      
+      console.log('Response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Response error:', errorText);
+        throw new Error(`HTTP ${response.status}: ${errorText || 'Failed to fetch items'}`);
+      }
+      
+      const data = await response.json();
+      console.log('Fetched data:', data);
+      
+      // Handle different response structures
+      if (data && typeof data === 'object') {
+        const content = data.content || data.data || data || [];
+        const pageNumber = data.pageNumber || data.page || page;
+        const pageSize = data.pageSize || data.size || size;
+        const totalElements = data.totalElements || data.total || content.length;
+        
+        // Force re-render by creating new array reference
+        setItems(Array.isArray(content) ? [...content] : []);
+        setCurrentPage(pageNumber);
+        setPageSize(pageSize);
+        setTotalItems(totalElements);
+        
+        // Update sorting state if different
+        if (sortField !== sortBy) setSortBy(sortField);
+        if (sortDirection !== sortDir) setSortDir(sortDirection);
+        
+        console.log('Items updated:', content.length);
+      } else {
+        console.warn('Unexpected response format:', data);
+        setItems([]);
+      }
+      
+    } catch (error) {
+      console.error('Error fetching items:', error);
+      customToast('error', `Failed to fetch items: ${error.message}`);
+      setItems([]);
+      setTotalItems(0);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  // Fetch brands function
+  const fetchBrands = useCallback(async () => {
+    try {
+      console.log('Fetching brands...');
+      const response = await fetch('http://localhost:8080/api/brand', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      console.log('Brands response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Brands response error:', errorText);
+        throw new Error(`HTTP ${response.status}: ${errorText || 'Failed to fetch brands'}`);
+      }
+      
+      const data = await response.json();
+      console.log('Fetched brands:', data);
+      
+      setBrands(Array.isArray(data) ? [...data] : []); // Force new array reference
+    } catch (error) {
+      console.error('Error fetching brands:', error);
+      customToast('error', `Failed to fetch brands: ${error.message}`);
+      setBrands([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    console.log('Component mounted, fetching initial data...');
+    fetchBrands();
+    fetchItems(1, 6, 'id', 'DESC'); // Explicit initial values
+  }, []); // Remove dependencies to prevent infinite loops
 
   useEffect(() => {
     if (selectedBrand && pNumber && lNumber) {
@@ -49,44 +152,25 @@ export default function ItemMaster() {
     }
   }, [selectedBrand, pNumber, lNumber, brands]);
 
-  // Fetch brands
-  const fetchBrands = async () => {
-    try {
-      const response = await fetch('http://localhost:8080/api/brand');
-      const data = await response.json();
-      setBrands(data);
-    } catch (error) {
-      console.error('Error fetching brands:', error);
-    }
-  };
-
-  const fetchItems = async (page, size) => {
-    try {
-      const response = await fetch(`http://localhost:8080/api/item/paginated?page=${page}&size=${size}&sortBy=${sortBy}&sortDir=${sortDir}`);
-      const data = await response.json();
-      setItems(data.content);
-      setCurrentPage(data.pageNumber);
-      setPageSize(data.pageSize);
-      setTotalItems(data.totalElements);
-    } catch (error) {
-      console.error('Error fetching items:', error);
-    }
-  };
-
   const handleTableChange = (pagination, filters, sorter) => {
     const newPage = pagination.current;
     const newSize = pagination.pageSize;
-    setCurrentPage(newPage);
-    setPageSize(newSize);
-
+    
+    let newSortBy = sortBy;
+    let newSortDir = sortDir;
+    
     if (sorter && sorter.field) {
-      setSortBy(sorter.field);
-      setSortDir(sorter.order === 'ascend' ? 'ASC' : 'DESC');
+      newSortBy = sorter.field;
+      newSortDir = sorter.order === 'ascend' ? 'ASC' : 'DESC';
     }
 
-    fetchItems(newPage, newSize);
-  };
+    setCurrentPage(newPage);
+    setPageSize(newSize);
+    setSortBy(newSortBy);
+    setSortDir(newSortDir);
 
+    fetchItems(newPage, newSize, newSortBy, newSortDir);
+  };
 
   const handleEdit = (record) => {
     setIsUpdateMode(true);
@@ -103,19 +187,41 @@ export default function ItemMaster() {
 
   const handleDelete = async (data) => {
     try {
+      setLoading(true);
+      console.log('Deleting item:', data.id);
+      
       const res = await axios.delete(`http://localhost:8080/api/item/${data.id}`);
-      if (!res.data.id) {
+      console.log('Delete response:', res.data);
+      
+      if (!res.data || !res.data.id) {
         customToast('error', "Error When Deleting");
         return;
       }
+      
       customToast('success', "Item Deleted Successfully");
       handleReset();
-      fetchItems(currentPage, pageSize);
+      
+      // Calculate if we need to go to previous page
+      const remainingItems = totalItems - 1;
+      const maxPageAfterDelete = Math.ceil(remainingItems / pageSize);
+      const targetPage = currentPage > maxPageAfterDelete ? Math.max(1, maxPageAfterDelete) : currentPage;
+      
+      console.log('Refreshing items after delete, target page:', targetPage);
+      
+      // Refresh the table data with a small delay to ensure backend is updated
+      setTimeout(() => {
+        fetchItems(targetPage, pageSize, sortBy, sortDir);
+      }, 100);
+      
     } catch (error) {
+      console.error('Delete error:', error);
       if (error.response?.data?.message?.includes("This item has associated GRN")) {
-        return customToast('error', `This item has associated GRN`);
+        customToast('error', `This item has associated GRN`);
+      } else {
+        customToast('error', `Error When Deleting: ${error.message}`);
       }
-      customToast('error', `Error When Deleting ${error}`);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -124,12 +230,18 @@ export default function ItemMaster() {
       if (!wholesaleAmount || !selectedBrand || !retailAmount || !pNumber || !lNumber) {
         return customToast('error', "All Fields Are Required");
       }
+      
       let LnumberData = L_Number_List.find((data) => lNumber === data.code);
       if (!isUpdateMode || (editingItem && editingItem.itemCode !== materialCode)) {
         if (!LnumberData) return customToast('error', "Invalid L Number");
       }
+      
+      setLoading(true);
+      console.log('Adding/updating item:', { isUpdateMode, materialCode });
+      
+      let response;
       if (isUpdateMode) {
-        await axios.put('http://localhost:8080/api/item', {
+        response = await axios.put('http://localhost:8080/api/item', {
           id: editingItem.id,
           itemCode: materialCode,
           itemDescription: materialDescription,
@@ -143,7 +255,7 @@ export default function ItemMaster() {
         });
         customToast('success', "Item Updated Successfully");
       } else {
-        await axios.post('http://localhost:8080/api/item', {
+        response = await axios.post('http://localhost:8080/api/item', {
           itemCode: materialCode,
           itemDescription: materialDescription,
           wholesalePrice: parseFloat(wholesaleAmount) || 0,
@@ -155,17 +267,26 @@ export default function ItemMaster() {
         });
         customToast('success', "Item Created Successfully");
       }
+      
+      console.log('Add/Update response:', response.data);
       handleReset();
-      fetchItems(currentPage, pageSize);
+      
+      // Refresh the table data with a small delay
+      setTimeout(() => {
+        fetchItems(currentPage, pageSize, sortBy, sortDir);
+      }, 100);
+      
     } catch (error) {
+      console.error('Add/Update error:', error);
       if (error.response?.data?.message?.includes("Item already exists")) {
         customToast('error', "Item already exists with this code and brand");
       } else {
-        customToast('error', "Something Went Wrong");
+        customToast('error', `Something Went Wrong: ${error.message}`);
       }
+    } finally {
+      setLoading(false);
     }
   };
-
 
   const handleReset = () => {
     setSelectedBrand('');
@@ -179,42 +300,97 @@ export default function ItemMaster() {
     setEditingItem(null);
   };
 
-
   const handleAddBrand = () => setCreateBrand(true);
+
   const handleDeleteBrand = async (id) => {
     try {
+      setLoading(true);
       const response = await axios.delete(`http://localhost:8080/api/brand/${id}`);
+      
       if (response.data?.id) {
         customToast('success', 'Brand Deleted Successfully');
-        fetchBrands();
-        if (selectedBrand === id.toString()) setSelectedBrand('');
-      } else customToast('error', 'Error when deleting brand');
+        await fetchBrands(); // Refresh brands list
+        if (selectedBrand === id.toString()) {
+          setSelectedBrand('');
+          setMaterialCode(''); // Reset material code if selected brand was deleted
+        }
+      } else {
+        customToast('error', 'Error when deleting brand');
+      }
     } catch (error) {
-      console.log(error);
-      
+      console.error(error);
       const message = error.response?.data || error.message || 'Error deleting brand';
       customToast('error', message);
+    } finally {
+      setLoading(false);
     }
   };
 
-
   const columns = [
-    { title: 'Item Code', dataIndex: 'itemCode', key: 'itemCode', sorter: true },
-    { title: 'Brand', dataIndex: ['itemBrand', 'brandName'], key: 'brandName', sorter: true },
-    { title: 'Retail Price', dataIndex: 'retailPrice', key: 'retailPrice', sorter: true,
-      render: (value) => value ? value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "-" },
-    { title: 'Wholesale Price', dataIndex: 'wholesalePrice', key: 'wholesalePrice', sorter: true,
-      render: (value) => value ? value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "-" },
-    { title: 'Available Stock', dataIndex: 'availableStock', key: 'availableStock' },
-    { title: 'Stock (Liters)', dataIndex: 'stockInLiters', key: 'stockInLiters',
-      render: (value) => value ? value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "-" },
-    { title: 'Stock (Millilitres)', dataIndex: 'stockInMillilitres', key: 'stockInMillilitres',
+    { 
+      title: 'Item Code', 
+      dataIndex: 'itemCode', 
+      key: 'itemCode', 
+      sorter: true,
+      width: 150
+    },
+    { 
+      title: 'Brand', 
+      dataIndex: ['itemBrand', 'brandName'], 
+      key: 'brandName', 
+      sorter: true,
+      width: 120
+    },
+    { 
+      title: 'Retail Price', 
+      dataIndex: 'retailPrice', 
+      key: 'retailPrice', 
+      sorter: true,
+      width: 120,
+      render: (value) => value ? value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "-" 
+    },
+    { 
+      title: 'Wholesale Price', 
+      dataIndex: 'wholesalePrice', 
+      key: 'wholesalePrice', 
+      sorter: true,
+      width: 130,
+      render: (value) => value ? value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "-" 
+    },
+    { 
+      title: 'Available Stock', 
+      dataIndex: 'availableStock', 
+      key: 'availableStock',
+      width: 120
+    },
+    { 
+      title: 'Stock (Liters)', 
+      dataIndex: 'stockInLiters', 
+      key: 'stockInLiters',
+      width: 120,
+      render: (value) => value ? value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "-" 
+    },
+    { 
+      title: 'Stock (Millilitres)', 
+      dataIndex: 'stockInMillilitres', 
+      key: 'stockInMillilitres',
+      width: 150,
       render: (value) => value ? value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "-"
-     },
+    },
     {
-      title: 'Action', key: 'action', render: (_, record) => (
+      title: 'Action', 
+      key: 'action', 
+      width: 120,
+      render: (_, record) => (
         <>
-          <Button type="primary" icon={<EditOutlined />} onClick={() => handleEdit(record)} size="small" style={{ marginRight: 8, borderRadius: 50, padding: 15 }} />
+          <Button 
+            type="primary" 
+            icon={<EditOutlined />} 
+            onClick={() => handleEdit(record)} 
+            size="small" 
+            style={{ marginRight: 8, borderRadius: 50, padding: 15 }}
+            loading={loading}
+          />
           <Popconfirm
             title="Delete Item"
             description="Are you sure to delete this item ?"
@@ -224,12 +400,25 @@ export default function ItemMaster() {
             okButtonProps={{ className: "custom-popconfirm-btn-ok" }}
             cancelButtonProps={{ className: "custom-popconfirm-btn-cancel" }}
           >
-            <Button type="primary" danger icon={<DeleteOutlined />} size="small" style={{ borderRadius: 50, padding: 15 }} />
+            <Button 
+              type="primary" 
+              danger 
+              icon={<DeleteOutlined />} 
+              size="small" 
+              style={{ borderRadius: 50, padding: 15 }}
+              loading={loading}
+            />
           </Popconfirm>
         </>
       ),
     },
   ];
+
+  // Handler for when brand is created
+  const handleBrandCreated = useCallback(async () => {
+    await fetchBrands();
+    setCreateBrand(false);
+  }, [fetchBrands]);
 
   return (
     <MainLayout>
@@ -257,6 +446,7 @@ export default function ItemMaster() {
                 placeholder="Select Brand"
                 className='!shadow-md border-0'
                 style={{ flex: 1, height: 48, borderRadius: 9, background: '#fff', boxShadow: '0 2px 8px #f0f1f2', fontFamily: 'Poppins' }}
+                loading={loading}
               >
                 {brands.length === 0 && (
                   <Select.Option disabled key="no-brands">No Brands</Select.Option>
@@ -266,25 +456,27 @@ export default function ItemMaster() {
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontFamily: 'Poppins' }}>
                       <span>{brand.brandName}</span>
                       <Popconfirm
-                 title="Delete Brand"
-                 description="Are you sure to delete this brand ?"
-                 onConfirm={e => { e.stopPropagation(); handleDeleteBrand(brand.id) }}
-                 okText="Confirm"
-                 cancelText="Cancel"
-                 okButtonProps={{ className: "custom-popconfirm-btn-ok" }}
-                 cancelButtonProps={{ className: "custom-popconfirm-btn-cancel" }}
-                >
-                     <DeleteOutlined
-                        // onClick={e => { e.stopPropagation(); handleDeleteBrand(brand.id) }}
-                        style={{ color: 'red', marginLeft: 8 }}
-                      />
-                </Popconfirm>
-                   
+                        title="Delete Brand"
+                        description="Are you sure to delete this brand ?"
+                        onConfirm={e => { e.stopPropagation(); handleDeleteBrand(brand.id) }}
+                        okText="Confirm"
+                        cancelText="Cancel"
+                        okButtonProps={{ className: "custom-popconfirm-btn-ok" }}
+                        cancelButtonProps={{ className: "custom-popconfirm-btn-cancel" }}
+                      >
+                        <DeleteOutlined
+                          style={{ color: 'red', marginLeft: 8 }}
+                        />
+                      </Popconfirm>
                     </div>
                   </Select.Option>
                 ))}
               </Select>
-              <button onClick={handleAddBrand} className="w-8 h-8 bg-black text-white rounded-full flex items-center justify-center text-sm font-bold shadow-md hover:bg-gray-300 transition-colors" >
+              <button 
+                onClick={handleAddBrand} 
+                className="w-8 h-8 bg-black text-white rounded-full flex items-center justify-center text-sm font-bold shadow-md hover:bg-gray-300 transition-colors"
+                disabled={loading}
+              >
                 +
               </button>
             </div>
@@ -298,6 +490,7 @@ export default function ItemMaster() {
               value={pNumber}
               onChange={(e) => setPNumber(e.target.value)}
               className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-white"
+              disabled={loading}
             />
           </div>
 
@@ -309,6 +502,7 @@ export default function ItemMaster() {
               placeholder="Select L Number"
               className='!shadow-md border-0'
               style={{ width: '100%', height: 48, borderRadius: 9, background: '#fff', boxShadow: '0 2px 8px #f0f1f2', fontFamily: 'Poppins' }}
+              loading={loading}
             >
               {L_Number_List.map((l) => (
                 <Select.Option value={l.code} key={l.code}>
@@ -332,62 +526,66 @@ export default function ItemMaster() {
           />
         </div>
 
-    {/* Price Inputs Row */}
-    <div className="flex flex-col gap-5">
+        {/* Price Inputs Row */}
+        <div className="flex flex-col gap-5">
 
-      <div className="flex flex-col w-full">
-         <label className="mb-1 text-white">Wholesale Amount</label>
-      <InputNumber
-        value={wholesaleAmount ? Number(wholesaleAmount) : null}
-        onChange={(value) => setWholesaleAmount(value)}
-        formatter={(value) => value?.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") }
-        parser={(value) => value.replace(/\$\s?|(,*)/g, "")}
-        className="w-full"   // applies to the wrapper
-        style={{
-            width: "100%", 
-            height: 48,
-            borderRadius: 12,
-            fontFamily: "Poppins, sans-serif", // apply font
-            fontSize: 16 }}
-        inputStyle={{
-            fontFamily: "Poppins, sans-serif", // input text font
-            fontSize: 16,
-           }}
-          />
-        </div>
+          <div className="flex flex-col w-full">
+             <label className="mb-1 text-white">Wholesale Amount</label>
+          <InputNumber
+            value={wholesaleAmount ? Number(wholesaleAmount) : null}
+            onChange={(value) => setWholesaleAmount(value)}
+            formatter={(value) => value?.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") }
+            parser={(value) => value.replace(/\$\s?|(,*)/g, "")}
+            className="w-full"
+            style={{
+                width: "100%", 
+                height: 48,
+                borderRadius: 12,
+                fontFamily: "Poppins, sans-serif",
+                fontSize: 16 }}
+            inputStyle={{
+                fontFamily: "Poppins, sans-serif",
+                fontSize: 16,
+               }}
+            disabled={loading}
+              />
+            </div>
 
-      <div className="flex flex-col w-full">
-         <label className="mb-1 text-white">Retail Amount</label>
-      <InputNumber
-         value={retailAmount ? Number(retailAmount) : null}
-         onChange={(value) => setRetailAmount(value)}
-         formatter={(value) => value?.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
-         parser={(value) => value.replace(/\$\s?|(,*)/g, "")}
-         className="w-full px-4 py-3 rounded-lg shadow-md border-0 bg-white"
-         style={{
-          width: "100%", 
-          height: 48,
-          borderRadius: 12,
-          fontFamily: "Poppins, sans-serif", // apply font
-          fontSize: 16 }}
-          inputStyle={{
-            fontFamily: "Poppins, sans-serif", // input text font
-            fontSize: 16 }}
-          />
-       </div>
-      </div>
+          <div className="flex flex-col w-full">
+             <label className="mb-1 text-white">Retail Amount</label>
+          <InputNumber
+             value={retailAmount ? Number(retailAmount) : null}
+             onChange={(value) => setRetailAmount(value)}
+             formatter={(value) => value?.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
+             parser={(value) => value.replace(/\$\s?|(,*)/g, "")}
+             className="w-full px-4 py-3 rounded-lg shadow-md border-0 bg-white"
+             style={{
+              width: "100%", 
+              height: 48,
+              borderRadius: 12,
+              fontFamily: "Poppins, sans-serif",
+              fontSize: 16 }}
+              inputStyle={{
+                fontFamily: "Poppins, sans-serif",
+                fontSize: 16 }}
+              disabled={loading}
+              />
+           </div>
+          </div>
 
         {/* Action Buttons */}
         <div className="flex space-x-4 pt-4">
           <button
             onClick={handleAddItem}
-            className="px-6 py-3 w-[200px] bg-[#FC890D] text-white rounded-lg shadow-md hover:bg-[#fc890de9] transition-colors"
+            className="px-6 py-3 w-[200px] bg-[#FC890D] text-white rounded-lg shadow-md hover:bg-[#fc890de9] transition-colors disabled:opacity-50"
+            disabled={loading}
           >
-            {isUpdateMode ? 'Save Changes' : 'Add Item'}
+            {loading ? 'Processing...' : (isUpdateMode ? 'Save Changes' : 'Add Item')}
           </button>
           <button
             onClick={handleReset}
-            className="px-6 py-3 w-[120px] bg-[#AAA69F] text-white rounded-lg shadow-md hover:bg-[#646363] transition-colors"
+            className="px-6 py-3 w-[120px] bg-[#AAA69F] text-white rounded-lg shadow-md hover:bg-[#646363] transition-colors disabled:opacity-50"
+            disabled={loading}
           >
             {isUpdateMode ? 'Cancel' : 'Reset'}
           </button>
@@ -400,22 +598,26 @@ export default function ItemMaster() {
           dataSource={items}
           columns={columns}
           rowKey="id"
+          loading={loading}
           pagination={{
-          current: currentPage,
-          pageSize: 6,     
-          total: totalItems,
-          showSizeChanger: false  
-         }}
+            current: currentPage,
+            pageSize: pageSize,     
+            total: totalItems,
+            showSizeChanger: false,
+            showQuickJumper: true,
+            showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} items`
+          }}
           onChange={handleTableChange}
           size="large"
           className="text-base"
+          scroll={{ x: 1000 }}
          />
       </div>
 
       {/* Create Brand Modal */}
       {showCreateBrand && (
         <CreateBrand
-          fetchBrands={fetchBrands}
+          fetchBrands={handleBrandCreated}
           setCreateBrand={setCreateBrand}
         />
       )}
