@@ -5,7 +5,7 @@ import MainLayout from '../layouts/MainLayout'
 import axios from 'axios'
 import { DeleteOutlined, EditOutlined } from '@ant-design/icons'
 import { customToast } from '../utils/toast'
-import { Table, Button, Input, InputNumber, Select, Form } from 'antd'
+import { Table, Button, InputNumber, Select, Popconfirm } from 'antd'
 
 const { Option } = Select
 
@@ -19,17 +19,13 @@ const EditableCell = ({
   children,
   ...restProps
 }) => {
-  const inputNode = inputType === 'number' ? <InputNumber /> : <Input />
+  const inputNode = inputType === 'number' ? <InputNumber /> : <input />
   return (
     <td {...restProps}>
       {editing ? (
-        <Form.Item
-          name={dataIndex}
-          style={{ margin: 0 }}
-          rules={[{ required: true, message: `Please Input ${title}!` }]}
-        >
+        <div style={{ margin: 0 }}>
           {inputNode}
-        </Form.Item>
+        </div>
       ) : (
         children
       )}
@@ -43,8 +39,6 @@ const ReturnPage = () => {
   const [quantity, setQuantity] = useState('')
   const [isLoose, setIsLoose] = useState(false)
   const [looseInMili, setLooseInMili] = useState('')
-  const [itemUnitPrice, setItemUnitPrice] = useState('')
-  const [totalPrice, setTotalPrice] = useState('')
   const [returnItems, setReturnItems] = useState([])
   const [grandTotal, setGrandTotal] = useState(0)
   const [ronumber, setRonumber] = useState('')
@@ -71,31 +65,12 @@ const ReturnPage = () => {
   const fetchAllReturns = async () => {
     try {
       const res = await axios.get('http://localhost:8080/api/return')
-      setAllReturns(res.data)
+      // Reverse the array so the latest return is first
+      setAllReturns(res.data.slice().reverse())
     } catch (err) {
       customToast('error', 'Failed to fetch returns')
     }
   }
-
-  // Inject Poppins font for Select placeholder
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const style = document.createElement('style');
-      style.innerHTML = `
-        .poppins-select .ant-select-selection-placeholder,
-        .poppins-placeholder {
-          font-family: 'Poppins', sans-serif !important;
-          color: #000 !important;
-          font-weight: regular !important;
-          opacity: 0.5 !important;
-        }
-      `;
-      document.head.appendChild(style);
-      return () => {
-        document.head.removeChild(style);
-      };
-    }
-  }, []);
 
   // Generate next return order number
   const getCurrentReturnNumber = async () => {
@@ -123,26 +98,11 @@ const ReturnPage = () => {
   }
 
   useEffect(() => {
-    autoCalculateTotalPrice()
-  }, [quantity, itemUnitPrice, looseInMili, isLoose])
-
-  useEffect(() => {
     calculateGrandTotal()
   }, [returnItems])
 
-  const autoCalculateTotalPrice = () => {
-    if (isLoose && itemUnitPrice && looseInMili) {
-      setTotalPrice((parseFloat(itemUnitPrice) * parseFloat(looseInMili) / 1000).toFixed(2))
-    } else if (!isLoose && quantity && itemUnitPrice) {
-      setTotalPrice((parseFloat(quantity) * parseFloat(itemUnitPrice)).toFixed(2))
-    } else {
-      setTotalPrice('')
-    }
-  }
-
   const calculateGrandTotal = () => {
-    const total = returnItems.reduce((sum, item) => sum + parseFloat(item.totalAmount || 0), 0)
-    setGrandTotal(total)
+    setGrandTotal(returnItems.length)
   }
 
   const getItemName = (itemId) => {
@@ -153,8 +113,6 @@ const ReturnPage = () => {
   const resetForm = () => {
     setSelectedItem('')
     setQuantity('')
-    setItemUnitPrice('')
-    setTotalPrice('')
     setIsLoose(false)
     setLooseInMili('')
     setEditingIndex(null)
@@ -169,13 +127,11 @@ const ReturnPage = () => {
 
   const handleSelectItem = (value) => {
     setSelectedItem(value)
-    const item = items.find(i => i.id === value)
-    if (item) setItemUnitPrice(item.unitPrice || '')
   }
 
   const handleAddItem = () => {
-    if (!selectedItem || !itemUnitPrice) {
-      customToast('error', 'Please fill all fields')
+    if (!selectedItem) {
+      customToast('error', 'Please select an item')
       return
     }
     if (isLoose) {
@@ -199,11 +155,9 @@ const ReturnPage = () => {
       itemId: parseInt(selectedItem),
       itemName: getItemName(selectedItem),
       isLoose: Boolean(isLoose),
-      quantity: isLoose ? '' : parseInt(quantity),
+      quantity: isLoose ? 0 : parseInt(quantity),
       quantityLitres: isLoose ? quantityLitres : 0,
       quantityMiliLitres: isLoose ? quantityMiliLitres : 0,
-      unitPrice: parseFloat(itemUnitPrice),
-      totalAmount: parseFloat(totalPrice),
       createdAt: new Date().toISOString().slice(0, 19)
     }
     if (
@@ -239,8 +193,6 @@ const ReturnPage = () => {
     setIsLoose(Boolean(item.isLoose))
     setQuantity(item.quantity?.toString() || '')
     setLooseInMili(item.quantityMiliLitres?.toString() || '')
-    setItemUnitPrice(item.unitPrice.toString())
-    setTotalPrice(item.totalAmount.toString())
     setEditingIndex(index)
   }
 
@@ -252,15 +204,12 @@ const ReturnPage = () => {
     setIsSubmitting(true)
     const payload = {
       ronumber,
-      totalAmount: parseFloat(grandTotal),
       createdAt: new Date().toISOString(),
       items: returnItems.map(item => ({
         itemId: item.itemId,
         quantity: item.isLoose ? 0 : item.quantity,
         quantityLitres: item.isLoose ? item.quantityLitres : 0,
         quantityMiliLitres: item.isLoose ? item.quantityMiliLitres : 0,
-        unitPrice: item.unitPrice,
-        totalAmount: item.totalAmount,
         isLoose: item.isLoose
       }))
     }
@@ -279,30 +228,50 @@ const ReturnPage = () => {
 
   // Expandable table for all returns
   const nestedColumns = [
-    { title: 'Item', dataIndex: 'itemName', key: 'itemName' },
-    { title: 'Quantity', dataIndex: 'quantity', key: 'quantity', render: (q, r) => r.isLoose ? '-' : q },
-    { title: 'Quantity ML', dataIndex: 'quantityMiliLitres', key: 'quantityMiliLitres', render: (q, r) => r.isLoose ? q : '-' },
-    { title: 'Quantity L', dataIndex: 'quantityLitres', key: 'quantityLitres', render: (q, r) => r.isLoose ? q : '-' },
-    { title: 'Is Loose', dataIndex: 'isLoose', key: 'isLoose', render: v => v ? 'Yes' : 'No' },
-    { title: 'Unit Price', dataIndex: 'unitPrice', key: 'unitPrice', render: v => v?.toFixed(2) },
-    { title: 'Total Amount', dataIndex: 'totalAmount', key: 'totalAmount', render: v => v?.toFixed(2) },
+    { title: 'Item', dataIndex: 'itemName', key: 'itemName', width: 150 },
+    { title: 'Quantity', dataIndex: 'quantity', key: 'quantity', render: (q, r) => r.isLoose ? '-' : q, width: 120 },
+    { title: 'Quantity ML', dataIndex: 'quantityMiliLitres', key: 'quantityMiliLitres', render: (q, r) => r.isLoose ? q : '-', width: 120 },
+    { title: 'Quantity L', dataIndex: 'quantityLitres', key: 'quantityLitres', render: (q, r) => r.isLoose ? q : '-', width: 120 },
+    { title: 'Is Loose', dataIndex: 'isLoose', key: 'isLoose', render: v => v ? 'Yes' : 'No', width: 120 },
     {
       title: 'Actions',
       key: 'actions',
+      width: 120,
       render: (_, record, idx) => (
         <div className="flex gap-2 justify-center">
-          <Button icon={<EditOutlined />} size="small" onClick={() => handleUpdateItem(idx)} />
-          <Button icon={<DeleteOutlined />} size="small" danger onClick={() => handleRemoveItem(idx)} />
+          <Button 
+            type="primary" 
+            icon={<EditOutlined />} 
+            size="small" 
+            onClick={() => handleUpdateItem(idx)} 
+            style={{ borderRadius: 50, padding: '0 15px' }}
+          />
+          <Popconfirm
+            title="Remove Item"
+            description="Are you sure to remove this item?"
+            onConfirm={() => handleRemoveItem(idx)}
+            okText="Confirm"
+            cancelText="Cancel"
+            okButtonProps={{ className: "custom-popconfirm-btn-ok" }}
+            cancelButtonProps={{ className: "custom-popconfirm-btn-cancel" }}
+          >
+            <Button 
+              type="primary" 
+              danger 
+              icon={<DeleteOutlined />} 
+              size="small" 
+              style={{ borderRadius: 50, padding: '0 15px' }}
+            />
+          </Popconfirm>
         </div>
       )
     }
   ]
 
   const mainColumns = [
-    { title: 'Return No', dataIndex: 'ronumber', key: 'ronumber', width: '18%' },
-    { title: 'Created At', dataIndex: 'createdAt', key: 'createdAt', width: '18%', render: v => v?.split('T')[0] },
-    { title: 'Total Amount', dataIndex: 'totalAmount', key: 'totalAmount', width: '18%', render: v => v?.toFixed(2) },
-    { title: 'Count', key: 'itemsCount', width: '10%', render: (_, record) => record.items?.length || 0 }
+    { title: 'Return No', dataIndex: 'ronumber', key: 'ronumber', width: '40%', sorter: true },
+    { title: 'Created At', dataIndex: 'createdAt', key: 'createdAt', width: '35%', render: v => v?.split('T')[0], sorter: true },
+    { title: 'Count', key: 'itemsCount', width: '20%', render: (_, record) => record.items?.length || 0 }
   ]
 
   const expandedRowRender = (record) => (
@@ -322,209 +291,206 @@ const ReturnPage = () => {
 
   return (
     <MainLayout>
+      {/* Header */}
       <h1 className="text-2xl font-bold mb-6 w-full py-4 px-6 rounded-lg"
         style={{ background: 'linear-gradient(90deg, #D4D2D2 0%, #665E5E 100%)', color: '#515151' }}>
-        Return Items
+        {editingIndex !== null ? 'Update Return Item' : 'Return Items'}
       </h1>
+
       {/* Form Section */}
-      <div className='flex flex-col w-[60%] bg-[#3D3B3B] gap-2 px-8 py-8 rounded-lg'>
-        <div className="flex w-full flex-col gap-1">
-          <label className='mb-1 text-white'>Return Number</label>
-          <Input value={ronumber}  className="w-full px-4 py-3 rounded-lg shadow-md bg-white " />
-        </div>
-        <div className="flex w-full flex-col gap-1">
-          <label className='mb-1 text-white'>Select Item</label>
+      <div className="space-y-4 flex flex-col w-[60%] bg-[#3D3B3B] px-8 py-8 rounded-lg">
+        <div className="flex flex-col gap-5 w-full">
+          <div className='flex flex-col w-full'>
+            <label className='mb-1 text-white' style={{ fontFamily: 'Poppins, sans-serif' }}>Return Number</label>
+            <input
+              type="text"
+              value={ronumber}
+              readOnly
+              className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-gray-100"
+              style={{ 
+                height: 48, 
+                borderRadius: 12, 
+                fontFamily: 'Poppins, sans-serif', 
+                fontSize: 16 
+              }}
+            />
+          </div>
 
-          <Select
-            showSearch
-            style={{ width: '100%' }}
-            placeholder={<span className="poppins-placeholder">Select an item</span>}
-            value={selectedItem || undefined}
-            onChange={handleSelectItem}
-            options={items.map(item => ({
-              value: item.id,
-              label: getItemName(item.id)
-            }))}
-            className="poppins-select"
-          />
-
-  
+          <div className='flex flex-col w-full'>
+            <label className='mb-1 text-white' style={{ fontFamily: 'Poppins, sans-serif' }}>Select Item</label>
+            <Select
+              showSearch
+              value={selectedItem || undefined}
+              onChange={handleSelectItem}
+              placeholder="Select an item"
+              className='!shadow-md border-0'
+              style={{ 
+                width: '100%', 
+                height: 48, 
+                borderRadius: 12, 
+                background: '#fff', 
+                boxShadow: '0 2px 8px #f0f1f2', 
+                fontFamily: 'Poppins, sans-serif' 
+              }}
+              options={items.map(item => ({
+                value: item.id,
+                label: getItemName(item.id)
+              }))}
+              disabled={isSubmitting}
+            />
+          </div>
         </div>
+
+        {/* Checkbox */}
         <div className="flex items-center gap-2 py-4">
           <input
             type="checkbox"
             checked={isLoose}
             onChange={e => setIsLoose(e.target.checked)}
             className="h-5 w-5 cursor-pointer"
+            disabled={isSubmitting}
           />
-          <label className="text-white cursor-pointer">Is Loose</label>
+          <label className="text-white cursor-pointer" style={{ fontFamily: 'Poppins, sans-serif' }}>
+            Is Loose
+          </label>
         </div>
-        {!isLoose && (
-          <div className="flex w-full flex-col gap-1">
-            <label className='mb-1 text-white'>Quantity</label>
-            <InputNumber
-              min={1}
-              value={quantity}
-              onChange={setQuantity}
-              className="w-full px-4 py-3 rounded-lg shadow-md bg-white"
-            />
-          </div>
-        )}
-        {isLoose && (
-          <div className="flex w-full flex-col gap-1">
-            <label className='mb-1 text-white'>Quantity In Millilitres</label>
-            <InputNumber
-              min={1}
-              value={looseInMili}
-              onChange={setLooseInMili}
-              className="w-full px-4 py-3 rounded-lg shadow-md bg-white"
-            />
-          </div>
-        )}
-        <div className="flex w-full flex-col gap-1">
-          <label className='mb-1 text-white'>Item Unit Price</label>
-          <InputNumber
-            min={0}
-            value={itemUnitPrice}
-            onChange={setItemUnitPrice}
-            className="w-full px-4 py-3 rounded-lg shadow-md bg-white"
-          />
+
+        {/* Quantity Inputs */}
+        <div className="flex flex-col gap-5">
+          {!isLoose && (
+            <div className="flex flex-col w-full">
+              <label className="mb-1 text-white" style={{ fontFamily: 'Poppins, sans-serif' }}>Quantity</label>
+              <InputNumber
+                min={1}
+                value={quantity ? Number(quantity) : null}
+                onChange={(value) => setQuantity(value)}
+                className="w-full"
+                style={{
+                  width: "100%", 
+                  height: 48,
+                  borderRadius: 12,
+                  fontFamily: "Poppins, sans-serif",
+                  fontSize: 16,
+                  paddingTop:5
+                }}
+                disabled={isSubmitting}
+              />
+            </div>
+          )}
+
+          {isLoose && (
+            <div className="flex flex-col w-full">
+              <label className="mb-1 text-white" style={{ fontFamily: 'Poppins, sans-serif' }}>Quantity In Millilitres</label>
+              <InputNumber
+                min={1}
+                value={looseInMili ? Number(looseInMili) : null}
+                onChange={(value) => setLooseInMili(value)}
+                className="w-full"
+                style={{
+                  width: "100%", 
+                  height: 48,
+                  borderRadius: 12,
+                  fontFamily: "Poppins, sans-serif",
+                  fontSize: 16 
+                }}
+                disabled={isSubmitting}
+              />
+            </div>
+          )}
         </div>
-        <div className="flex w-full flex-col gap-1">
-          <label className='mb-1 text-white'>Total Price</label>
-          <InputNumber
-            value={totalPrice}
-            readOnly
-            className="w-full px-4 py-3 rounded-lg shadow-md bg-white"
-          />
-        </div>
-        <div className="flex gap-4 mt-6">
-          <Button onClick={resetForm} className="bg-[#AAA69F] text-white">Cancel</Button>
-          <Button onClick={handleAddItem} className="bg-[#FC890D] text-white">{editingIndex !== null ? 'Update Item' : 'Add Item'}</Button>
+
+        {/* Action Buttons */}
+        <div className="flex space-x-4 pt-4">
+          <button
+            onClick={handleAddItem}
+            className="px-6 py-3 w-[200px] bg-[#FC890D] text-white rounded-lg shadow-md hover:bg-[#fc890de9] transition-colors disabled:opacity-50"
+            style={{ fontFamily: 'Poppins, sans-serif', fontSize: 16 }}
+            disabled={isSubmitting}
+          >
+            {editingIndex !== null ? 'Update Item' : 'Add Item'}
+          </button>
+          <button
+            onClick={resetForm}
+            className="px-6 py-3 w-[120px] bg-[#AAA69F] text-white rounded-lg shadow-md hover:bg-[#646363] transition-colors disabled:opacity-50"
+            style={{ fontFamily: 'Poppins, sans-serif', fontSize: 16 }}
+            disabled={isSubmitting}
+          >
+            {editingIndex !== null ? 'Cancel' : 'Reset'}
+          </button>
         </div>
       </div>
 
       {/* Items Table */}
       {returnItems.length > 0 && (
         <div className="mt-8">
-          <h2 className="text-xl font-semibold mb-4 text-white">Added Items</h2>
-          <div className="overflow-x-auto">
-              <table className="w-full bg-white rounded-lg shadow-md">
-                <colgroup>
-                  <col style={{ width: '18%' }} />
-                  <col style={{ width: '10%' }} />
-                  <col style={{ width: '12%' }} />
-                  <col style={{ width: '12%' }} />
-                  <col style={{ width: '10%' }} />
-                  <col style={{ width: '12%' }} />
-                  <col style={{ width: '12%' }} />
-                  <col style={{ width: '14%' }} />
-                </colgroup>
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Item</th>
-                    <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Quantity</th>
-                    <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Quantity ML</th>
-                    <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Quantity L</th>
-                    <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Is Loose</th>
-                    <th className="px-4 py-3 text-right text-sm font-medium text-gray-900">Unit Price</th>
-                    <th className="px-4 py-3 text-right text-sm font-medium text-gray-900">Total Price</th>
-                    <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {returnItems.map((item, index) => (
-                    <tr key={index} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm text-gray-900">{item.itemName}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900 text-center">{item.quantity}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900 text-center">{item.quantityMiliLitres}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900 text-center">{item.quantityLitres}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900 text-center">{item.isLoose ? 'Yes' : 'No'}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900 text-right">{item.unitPrice.toFixed(2)}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900 text-right">{item.totalAmount.toFixed(2)}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900 text-center">
-                        <div className="flex justify-center gap-2">
-                          <button
-                            onClick={() => handleUpdateItem(index)}
-                            className="text-blue-600 hover:text-blue-800 p-1"
-                            title="Edit"
-                          >
-                            <EditOutlined />
-                          </button>
-                          <button
-                            onClick={() => handleRemoveItem(index)}
-                            className="text-red-600 hover:text-red-800 p-1"
-                            title="Remove"
-                          >
-                            <DeleteOutlined />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot className="bg-gray-50">
-                  <tr>
-                    <td colSpan="5" className="px-4 py-3 text-right font-semibold text-gray-900">Grand Total:</td>
-                    <td className="px-4 py-3 text-right font-bold text-gray-900">{grandTotal.toFixed(2)}</td>
-                    <td></td>
-                  </tr>
-                </tfoot>
-              </table>
-          </div>
-          <div className="flex gap-4 mt-8">
-            <Button onClick={resetAll} className="bg-[#AAA69F] text-white">Reset</Button>
-            <Button type="primary" loading={isSubmitting} onClick={handleSubmitReturn} className="bg-[#FC890D] text-white">
-              Submit Return
-            </Button>
+          <h2 className="text-xl text-white font-bold mb-4" style={{ fontFamily: 'Poppins, sans-serif' }}>Added Items</h2>
+          <Table
+            dataSource={returnItems.map((item, index) => ({
+              ...item,
+              key: index
+            }))}
+            columns={nestedColumns}
+            pagination={false}
+            size="large"
+            className="text-base"
+            bordered
+            scroll={{ x: 1000 }}
+            summary={(pageData) => (
+              <Table.Summary.Row>
+                <Table.Summary.Cell index={0} colSpan={4}>
+                  <strong style={{ fontFamily: 'Poppins, sans-serif' }}>Total Items:</strong>
+                </Table.Summary.Cell>
+                <Table.Summary.Cell index={1}>
+                  <strong style={{ fontFamily: 'Poppins, sans-serif' }}>{grandTotal}</strong>
+                </Table.Summary.Cell>
+                <Table.Summary.Cell index={2}></Table.Summary.Cell>
+              </Table.Summary.Row>
+            )}
+          />
+          
+          <div className="flex space-x-4 mt-8">
+            <button
+              onClick={resetAll}
+              className="px-6 py-3 w-[120px] bg-[#AAA69F] text-white rounded-lg shadow-md hover:bg-[#646363] transition-colors disabled:opacity-50"
+              style={{ fontFamily: 'Poppins, sans-serif', fontSize: 16 }}
+              disabled={isSubmitting}
+            >
+              Reset
+            </button>
+            <button
+              onClick={handleSubmitReturn}
+              className="px-6 py-3 w-[200px] bg-[#FC890D] text-white rounded-lg shadow-md hover:bg-[#fc890de9] transition-colors disabled:opacity-50"
+              style={{ fontFamily: 'Poppins, sans-serif', fontSize: 16 }}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? 'Submitting...' : 'Submit Return'}
+            </button>
           </div>
         </div>
       )}
 
       {/* All Returns Expandable Table */}
       <div className="mt-12">
-        <h2 className="text-xl font-bold mb-4 text-white">All Returns</h2>
+        <h2 className="text-xl text-white font-bold mb-4" style={{ fontFamily: 'Poppins, sans-serif' }}>All Returns</h2>
         <Table
-          columns={mainColumns.map(col => ({
-            ...col,
-            width: col.key === 'ronumber' ? '35%' :
-                   col.key === 'createdAt' ? '25%' :
-                   col.key === 'totalAmount' ? '18%' :
-                   col.key === 'itemsCount' ? '10%' : undefined
-          }))}
+          columns={mainColumns}
           dataSource={allReturns}
           expandable={{
-            expandedRowRender: record => (
-              <Table
-                bordered
-                dataSource={record.items.map((item, idx) => ({
-                  ...item,
-                  itemName: getItemName(item.itemId),
-                  key: idx
-                }))}
-                columns={nestedColumns.map(col => ({
-                  ...col,
-                  width: col.key === 'itemName' ? '18%' :
-                         col.key === 'quantity' ? '10%' :
-                         col.key === 'quantityMiliLitres' ? '12%' :
-                         col.key === 'quantityLitres' ? '12%' :
-                         col.key === 'isLoose' ? '10%' :
-                         col.key === 'unitPrice' ? '12%' :
-                         col.key === 'totalAmount' ? '12%' : undefined
-                }))}
-                pagination={false}
-                size="small"
-                rowClassName="editable-row"
-              />
-            ),
+            expandedRowRender: expandedRowRender,
             defaultExpandedRowKeys: [],
             columnWidth: "100px",
           }}
-          pagination={{ pageSize: 10 }}
+          pagination={{ 
+            pageSize: 10,
+            showSizeChanger: false,
+            showQuickJumper: true,
+            showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} items`
+          }}
           size="large"
           className="text-base"
           bordered
           rowKey="id"
+          scroll={{ x: 1000 }}
         />
       </div>
     </MainLayout>
