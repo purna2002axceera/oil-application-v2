@@ -185,7 +185,10 @@ const page = () => {
   }, [editGrnItems])
 
   useEffect(() => {
-    applyFilters()
+    // Only apply local filters if searchText is empty (not using API search)
+    if (!searchText || searchText.trim() === '') {
+      applyFilters();
+    }
   }, [searchText, selectedDate, allGrns])
 
   const handleSelectItem = (val) =>{
@@ -445,8 +448,70 @@ const page = () => {
     }
   }
 
+
+  // Fetch GRNs from search API
+  const fetchSearchGrns = async (searchValue) => {
+    try {
+      const params = new URLSearchParams();
+      if (searchValue) {
+        if (searchValue.toUpperCase().startsWith('INV')) {
+          params.append('invoiceNumber', searchValue);
+        } else if (searchValue.toUpperCase().startsWith('PO')) {
+          params.append('grnNumber', searchValue);
+        } else {
+          // fallback: search both
+          params.append('grnNumber', searchValue);
+          params.append('invoiceNumber', searchValue);
+        }
+      }
+      params.append('page', '1');
+      params.append('size', pageSize.toString());
+      params.append('sortBy', 'createdAt');
+      params.append('sortDir', 'desc');
+
+      const response = await fetch(`http://localhost:8080/api/grn/search?${params.toString()}`);
+      const data = await response.json();
+      let grnArray = [];
+      if (Array.isArray(data)) {
+        grnArray = data;
+      } else if (data && Array.isArray(data.content)) {
+        grnArray = data.content;
+      } else if (data && data.data && Array.isArray(data.data)) {
+        grnArray = data.data;
+      } else {
+        setFilteredGrns([]);
+        setCurrentPage(1);
+        return;
+      }
+      const grnData = grnArray.map(grn => {
+        const formattedCreatedAt = grn.createdAt?.split('T')[0] || '';
+        return {
+          ...grn,
+          createdAt: formattedCreatedAt,
+          key: grn.id?.toString() || Math.random().toString(),
+          items: (grn.items || []).map((item, index) => ({
+            ...item,
+            key: `${grn.id || 'x'}-${item.id || index}`,
+            itemName: getItemName(item.itemId) || `Item ${item.itemId}`
+          }))
+        }
+      });
+      setFilteredGrns(grnData);
+      setCurrentPage(1);
+    } catch (error) {
+      customToast('error', 'Error searching GRNs');
+      console.error('Error searching GRNs:', error);
+    }
+  }
+
+  // Update search to use API
   const handleSearch = (value) => {
-    setSearchText(value)
+    setSearchText(value);
+    if (value && value.trim() !== '') {
+      fetchSearchGrns(value.trim());
+    } else {
+      applyFilters();
+    }
   }
 
   const handleDateChange = (date) => {
@@ -468,38 +533,13 @@ const page = () => {
   const isEditing = (record) => record.key === editingKey;
 
   const nestedColumns = [
-    {
-      title: 'Item Code',
-      dataIndex: 'itemCode',
-      key: 'itemCode',
-      editable: true,
-    },
-    {
-      title: 'Quantity',
-      dataIndex: 'quantity',
-      key: 'quantity',
-      editable: true,
-    },
-    {
-      title: 'Supplier Name',
-      dataIndex: 'supplierName',
-      key: 'supplierName',
-      editable: true,
-    },
-    {
-      title: 'Unit Price',
-      dataIndex: 'unitPrice',
-      key: 'unitPrice',
-      render: (value) => value ? value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "-",
-      editable: true,
-    },
-    {
-      title: 'Total Amount',
-      dataIndex: 'totalAmount',
-      key: 'totalAmount',
-      render: (value) => value ? value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "-",
-      editable: true,
-    }
+    { title: 'Item Code', dataIndex: 'itemCode', key: 'itemCode', editable: true },
+    { title: 'Item Name', dataIndex: 'itemName', key: 'itemName', editable: false },
+    { title: 'Quantity', dataIndex: 'quantity', key: 'quantity', editable: true },
+    { title: 'Supplier Name', dataIndex: 'supplierName', key: 'supplierName', editable: true },
+    { title: 'Unit Price', dataIndex: 'unitPrice', key: 'unitPrice', render: (value) => value ? value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "-", editable: true },
+    { title: 'Total Price', dataIndex: 'totalAmount', key: 'totalAmount', render: (value) => value ? value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "-", editable: true },
+    { title: 'Created At', dataIndex: 'createdAt', key: 'createdAt', editable: false },
   ];
 
   const mergedNestedColumns = nestedColumns.map((col) => {
@@ -520,59 +560,16 @@ const page = () => {
 
   // Main table columns
   const mainColumns = [
-    {
-      title: 'Purchase Number',
-      dataIndex: 'grnNumber',
-      key: 'grnNumber',
-      width: '15%',
-    },
-    {
-      title: 'Invoice Number',
-      dataIndex: 'invoiceNumber',
-      key: 'invoiceNumber',
-      width: '15%',
-    },
-    {
-      title: 'Created At',
-      dataIndex: 'createdAt',
-      key: 'createdAt',
-      width: '15%',
-    },
-    {
-      title: 'Total Amount',
-      dataIndex: 'totalAmount',
-      key: 'totalAmount',
-      width: '15%',
-      render: (value) => value ? value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "-",
-    },
-    {
-      title: 'Items Count',
-      key: 'itemsCount',
-      width: '15%',
-      render: (_, record) => record.items?.length || 0,
-    },
-    {
-      title: 'Action',
-      key: 'action',
-      width: '25%',
-      render: (_, record) => (
-        <div className="flex gap-2">
-          {/* <Button 
-            type="primary" 
-            icon={<EditOutlined />} 
-            onClick={() => handleEditGrn(record)}
-            size="small"
-          /> */}
-          <Button 
-            type="primary" 
-            danger
-            icon={<DeleteOutlined />} 
-            onClick={() => handleDeleteGrn(record.id)}
-            size="small"
-          />
-        </div>
-      ),
-    }
+    { title: 'Purchase Number', dataIndex: 'grnNumber', key: 'grnNumber', width: '25%' },
+    { title: 'Invoice Number', dataIndex: 'invoiceNumber', key: 'invoiceNumber', width: '20%' },
+    { title: 'Created At', dataIndex: 'createdAt', key: 'createdAt', width: '20%' },
+    { title: 'Total Amount', dataIndex: 'totalAmount', key: 'totalAmount', width: '10%', render: (value) => value ? value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "-" },
+    { title: 'Items Count', key: 'itemsCount', width: '8%', render: (_, record) => record.items?.length || 0 },
+    { title: 'Action', key: 'action', width: '18%', render: (_, record) => (
+      <div className="flex gap-2">
+        <Button type="primary" danger icon={<DeleteOutlined />} onClick={() => handleDeleteGrn(record.id)} size="small" />
+      </div>
+    ) },
   ];
 
   const expandedRowRender = (record) => (
@@ -636,21 +633,21 @@ const page = () => {
         <div className="flex w-full flex-col gap-1">
           <label className='mb-1 text-white'>Select Item</label>
           <Select
-      showSearch
-       size="large"
-      style={{ width: '100%' }}
-      placeholder="Select an item"
-      value={selectedItem || undefined}
-      onChange={(value) => handleSelectItem(value)}
-      optionFilterProp="label"
-      filterSort={(optionA, optionB) =>
-        (optionA?.label ?? '').toLowerCase().localeCompare((optionB?.label ?? '').toLowerCase())
-      }
-      options={items.map((item) => ({
-        value: item.id,
-        label: `${item.itemBrand.brandName} - ${item.itemCode}`,
-      }))}
-    />
+            showSearch
+            size="large"
+            style={{ width: '100%' }}
+            placeholder="Select an item"
+            value={selectedItem || undefined}
+            onChange={(value) => handleSelectItem(value)}
+            optionFilterProp="label"
+            filterSort={(optionA, optionB) =>
+              (optionA?.label ?? '').toLowerCase().localeCompare((optionB?.label ?? '').toLowerCase())
+            }
+            options={items.map((item) => ({
+              value: item.id,
+              label: `${item.itemBrand.brandName} - ${item.itemCode}`,
+            }))}
+          />
     
        </div>
        <div className="flex w-full flex-col gap-1">
