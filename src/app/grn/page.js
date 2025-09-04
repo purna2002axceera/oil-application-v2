@@ -506,9 +506,14 @@ const page = () => {
 
   // Update search to use API
   const handleSearch = (value) => {
-    setSearchText(value);
-    if (value && value.trim() !== '') {
-      fetchSearchGrns(value.trim());
+    let searchValue = value;
+    // If called from button click, value will be event, so use searchText from state
+    if (value && value.target) {
+      searchValue = searchText;
+    }
+    setSearchText(searchValue);
+    if (typeof searchValue === 'string' && searchValue.trim() !== '') {
+      fetchSearchGrns(searchValue.trim());
     } else {
       applyFilters();
     }
@@ -676,10 +681,7 @@ const page = () => {
             borderRadius: 12,
             fontFamily: "Poppins, sans-serif",
             fontSize: 16 }}
-        inputStyle={{
-            fontFamily: "Poppins, sans-serif",
-            fontSize: 16,
-           }}
+  // inputStyle removed: not a valid prop for InputNumber
       />
    </div>
        <div className="flex w-full flex-col gap-1">
@@ -697,10 +699,7 @@ const page = () => {
             borderRadius: 12,
             fontFamily: "Poppins, sans-serif",
             fontSize: 16 }}
-            inputStyle={{
-            fontFamily: "Poppins, sans-serif",
-            fontSize: 16,
-           }}
+            // inputStyle removed: not a valid prop for InputNumber
           />
    </div>
 
@@ -984,15 +983,16 @@ const page = () => {
       {/* Search by GRN Number or Invoice Number */}
       <div className="flex flex-col">
         <label className="mb-2 text-sm font-medium text-gray-700">Search by GRN/Invoice Number</label>
-        <Input.Search
+        <input
+          type="text"
           placeholder="Enter GRN or Invoice Number"
           value={searchText}
-          onChange={(e) => setSearchText(e.target.value)}
-          onSearch={handleSearch}
-          style={{ width: 300 }}
-          prefix={<SearchOutlined />}
-          allowClear
+          onChange={e => setSearchText(e.target.value)}
+          className="w-[300px] h-[33px] text-sm px-3 py-2 rounded shadow border border-gray-300 text-gray-700"
+          style={{ fontFamily: 'Poppins' }}
         />
+        
+        
       </div>
 
       {/* Single Date Filter */}
@@ -1001,20 +1001,58 @@ const page = () => {
         <DatePicker
           value={selectedDate}
           onChange={handleDateChange}
-          style={{ width: 200 }}
+          style={{ width: 200, height: 33, fontFamily: 'Poppins' }}
           format="YYYY-MM-DD"
           placeholder="Select Date"
           prefix={<CalendarOutlined />}
         />
       </div>
 
-      {/* Clear Filters Button */}
-      <Button 
-        onClick={clearFilters}
-        style={{ height: 32 }}
+      {/*Search Button*/}
+      <button
+        onClick={handleSearch}
+        style={{
+          backgroundColor: '#FC890D',
+          color: '#fff',
+          borderRadius: '6px',
+          padding: '0 16px',
+          height: '33px',
+          fontWeight: 400,
+          fontFamily: 'Poppins',
+          fontSize: '14px',
+          boxShadow: '0 2px 8px #f0f1f2',
+          border: 'none',
+          cursor: 'pointer',
+          transition: 'background 0.2s',
+        }}
+        onMouseOver={e => e.currentTarget.style.backgroundColor = '#FD9A2E'}
+        onMouseOut={e => e.currentTarget.style.backgroundColor = '#FC890D'}
       >
-        Clear Filters
-      </Button>
+        Search
+      </button>
+
+      {/* Clear Filters Button */}
+      <button
+        onClick={clearFilters}
+        style={{
+          backgroundColor: '#AAA69F',
+          color: '#fff',
+          borderRadius: '6px',
+          padding: '0 16px',
+          height: '33px',
+          fontWeight: 400,
+          fontFamily: 'Poppins',
+          fontSize: '14px',
+          boxShadow: '0 2px 8px #f0f1f2',
+          border: 'none',
+          cursor: 'pointer',
+          transition: 'background 0.2s',
+        }}
+        onMouseOver={e => e.currentTarget.style.backgroundColor = '#646363'}
+        onMouseOut={e => e.currentTarget.style.backgroundColor = '#AAA69F'}
+      >
+        Clear
+      </button>
     </div>
 
     {/* Updated Filter Results Summary */}

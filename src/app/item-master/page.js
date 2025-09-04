@@ -11,6 +11,7 @@ import { L_Number_List } from '../utils/l_numbers';
 
 export default function ItemMaster() {
   // State variables
+
   const [brands, setBrands] = useState([]);
   const [items, setItems] = useState([]);
   const [selectedBrand, setSelectedBrand] = useState('');
@@ -24,6 +25,62 @@ export default function ItemMaster() {
   const [isUpdateMode, setIsUpdateMode] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [searchBrand, setSearchBrand] = useState('');
+  const [searchPNumber, setSearchPNumber] = useState('');
+  const [searchLNumber, setSearchLNumber] = useState('');
+  const [searchMaterialCode, setSearchMaterialCode] = useState('');
+  const [searchLoading, setSearchLoading] = useState(false);
+
+  // Compute Material Code for search bar
+  useEffect(() => {
+    let brandObj = brands.find(b => b.id.toString() === searchBrand);
+    if (brandObj && searchPNumber && searchLNumber) {
+      setSearchMaterialCode(`${brandObj.brandName} ${searchPNumber.toUpperCase()} ${searchLNumber}`);
+    } else {
+      setSearchMaterialCode('');
+    }
+  }, [searchBrand, searchPNumber, searchLNumber, brands]);
+
+  // Search handler for Material Code
+  const handleSearch = async () => {
+    if (!searchMaterialCode) {
+      customToast('error', 'Please select Brand, enter P-Number, and select L-Number to search.');
+      return;
+    }
+    setSearchLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.append('MaterialCode', searchMaterialCode);
+      params.append('page', currentPage);
+      params.append('size', pageSize);
+      params.append('sortBy', sortBy);
+      params.append('sortDir', sortDir);
+
+      const response = await fetch(`http://localhost:8080/api/item/Search-Material-Code?${params.toString()}`);
+      if (!response.ok) throw new Error('Failed to search items');
+      const data = await response.json();
+      let content = data.content || data.data || data || [];
+      setItems(Array.isArray(content) ? [...content] : []);
+      setTotalItems(Array.isArray(content) ? content.length : 0);
+      console.log('Search results:', content);
+    } catch (error) {
+      customToast('error', `Search failed: ${error.message}`);
+      setItems([]);
+      setTotalItems(0);
+      console.error('Search error:', error);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  // Reset search fields and reload all items
+  const handleClearSearch = () => {
+    setSearchBrand('');
+    setSearchPNumber('');
+    setSearchLNumber('');
+    setSearchMaterialCode('');
+    fetchItems(currentPage, pageSize, sortBy, sortDir);
+  };
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -589,6 +646,106 @@ export default function ItemMaster() {
           >
             {isUpdateMode ? 'Cancel' : 'Reset'}
           </button>
+        </div>
+      </div>
+
+      {/* Search Bar Section */}
+      <div className="mb-8 mt-6">
+        <div className="bg-white p-6 rounded-lg shadow-md flex flex-wrap gap-4 items-end">
+          {/* Brand Dropdown */}
+          <div className="flex flex-col">
+            <label className="mb-2 text-sm font-medium text-gray-700">Brand</label>
+            <Select
+              showSearch
+              placeholder="Select Brand"
+              value={searchBrand || undefined}
+              onChange={setSearchBrand}
+              style={{ width: 180 }}
+              allowClear
+              options={brands.map(b => ({ value: b.id.toString(), label: b.brandName }))}
+            />
+          </div>
+          {/* P-Number Input */}
+          <div className="flex flex-col">
+            <label className="mb-2 text-sm font-medium text-gray-700">P-Number</label>
+            <input
+              type="text"
+              placeholder="Enter P-Number"
+              value={searchPNumber}
+              onChange={e => setSearchPNumber(e.target.value)}
+              className="w-[180px] h-[33px] text-sm px-3 py-2 rounded shadow border border-gray-300 text-gray-700"
+            />
+          </div>
+          {/* L-Number Dropdown */}
+          <div className="flex flex-col">
+            <label className="mb-2 text-sm font-medium text-gray-700">L-Number</label>
+            <Select
+              showSearch
+              placeholder="Select L-Number"
+              value={searchLNumber || undefined}
+              onChange={setSearchLNumber}
+              style={{ width: 150 }}
+              allowClear
+              options={L_Number_List.map(l => ({ value: l.code, label: `${l.code} (${l.pack_size} ${l.pack_unit})` }))}
+            />
+          </div>
+          {/* Search & Clear Buttons */}
+          <div className="flex gap-2">
+            <button
+              onClick={handleSearch}
+              disabled={searchLoading}
+              style={{
+                backgroundColor: '#FC890D',
+                color: '#fff',
+                borderRadius: '6px',
+                padding: '0 16px',
+                height: '33px',
+                fontWeight: 400,
+                fontFamily: 'Poppins',
+                fontSize: '14px',
+                boxShadow: '0 2px 8px #f0f1f2',
+                border: 'none',
+                cursor: searchLoading ? 'not-allowed' : 'pointer',
+                opacity: searchLoading ? 0.7 : 1,
+                transition: 'background 0.2s',
+              }}
+              onMouseOver={e => e.currentTarget.style.backgroundColor = '#FD9A2E'}
+              onMouseOut={e => e.currentTarget.style.backgroundColor = '#FC890D'}
+            >
+              {searchLoading ? 'Searching...' : 'Search'}
+            </button>
+            <button
+              onClick={handleClearSearch}
+              style={{
+                backgroundColor: '#AAA69F',
+                color: '#fff',
+                borderRadius: '6px',
+                padding: '0 16px',
+                height: '33px',
+                fontWeight: 400,
+                fontFamily: 'Poppins',
+                fontSize: '14px',
+                boxShadow: '0 2px 8px #f0f1f2',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'background 0.2s',
+              }}
+              onMouseOver={e => e.currentTarget.style.backgroundColor = '#646363'}
+              onMouseOut={e => e.currentTarget.style.backgroundColor = '#AAA69F'}
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+        {/* Material Code Preview */}
+        <div className="mt-5 flex flex-col w-[400px]">
+          <label className="mb-1 text-sm font-medium text-white">Material Code (Combined)</label>
+          <input
+            type="text"
+            value={searchMaterialCode}
+            readOnly
+            className="w-full px-4 py-2 rounded shadow border border-gray-200 bg-gray-100"
+          />
         </div>
       </div>
 

@@ -3,12 +3,12 @@
 import React, { useEffect, useState } from 'react'
 import MainLayout from '../layouts/MainLayout'
 import axios from 'axios'
-import { DeleteOutlined, EditOutlined } from '@ant-design/icons'
+import { DeleteOutlined, EditOutlined, CalendarOutlined } from '@ant-design/icons'
 import { customToast } from '../utils/toast'
-import { Table, Button, Form, Input, InputNumber, Popconfirm, Typography, Select } from 'antd'
+import { Table, Button, Form, Input, InputNumber, Popconfirm, Typography, Select, DatePicker } from 'antd'
 import CreateCustomer from '../components/CreateCustomer'
 import quantityCalculator from '../utils/quantityCalculator'
-
+import dayjs from 'dayjs'
 
 const { Option } = Select
 const EditableCell = ({
@@ -60,8 +60,15 @@ const page = () => {
     const [salesItems, setSalesItems] = useState([])
     const [grandTotal, setGrandTotal] = useState(0)
     const [allSales, setAllSales] = useState([])
+    const [filteredSales, setFilteredSales] = useState([])
     const [editingKey, setEditingKey] = useState('');
     const [showCreateCustomer, setCreateCustomer] = useState(false)
+    
+    // Filter states
+  const [searchText, setSearchText] = useState('')
+  const [selectedDate, setSelectedDate] = useState(null)
+  // Add state for selectedOrderType for filtering
+  const [selectedOrderType, setSelectedOrderType] = useState('');
 
   const getCurrentSalesNumber = async () => {
     try {
@@ -148,14 +155,36 @@ const page = () => {
     return customer ? customer.customerName : `Customer ${customerId}`
   }
 
-  const fetchAllSales = async () => {
+  const fetchAllSales = async (searchParams = {}) => {
     try {
-      const response = await fetch('http://localhost:8080/api/sales-order');
+      let url = 'http://localhost:8080/api/sales-order';
+      
+      // If we have search parameters, use the filtered endpoint
+      if (searchParams.searchText || searchParams.date) {
+        url = 'http://localhost:8080/api/sales-order/allby';
+        const params = new URLSearchParams({
+          page: '1',
+          size: '1000', // Get more records for filtering
+          sortBy: 'id',
+          sortDir: 'desc'
+        });
+        
+        if (searchParams.date) {
+          params.append('CreatedAt', searchParams.date);
+        }
+        
+        url += `?${params.toString()}`;
+      }
+      
+      const response = await fetch(url);
       const data = await response.json();
+      
+      // Handle paginated response from /allby endpoint
+      const salesData = data.content || data;
       
       // Fetch customer names for all sales
       const salesWithCustomerNames = await Promise.all(
-        data.map(async (sale) => {
+        salesData.map(async (sale) => {
           const formattedCreatedAt = sale.createdAt.split('T')[0]
           let customerName = getCustomerName(sale.customerId);
           
@@ -181,12 +210,49 @@ const page = () => {
           }
         })
       );
+      
       console.log('Sales with customer names:', salesWithCustomerNames)
+      
+      // Apply local search filter if needed
+      let finalSales = salesWithCustomerNames;
+      if (searchParams.searchText) {
+        finalSales = salesWithCustomerNames.filter(sale =>
+          sale.salesNumber.toLowerCase().includes(searchParams.searchText.toLowerCase())
+        );
+      }
+      
       setAllSales(salesWithCustomerNames);
-      console.log('All Sales:', data)
+      setFilteredSales(finalSales);
+      console.log('All Sales:', salesData)
     } catch (error) {
       console.error('Error fetching Sales:', error);
     }
+  };
+
+  // Filter handlers
+  const handleDateChange = (date) => {
+    setSelectedDate(date);
+  };
+
+  const handleSearch = () => {
+    const searchParams = {};
+    
+    if (searchText.trim()) {
+      searchParams.searchText = searchText.trim();
+    }
+    
+    if (selectedDate) {
+      // Format date to ISO string for API
+      searchParams.date = selectedDate.toISOString();
+    }
+    
+    fetchAllSales(searchParams);
+  };
+
+  const clearFilters = () => {
+    setSearchText('');
+    setSelectedDate(null);
+    fetchAllSales(); // Fetch all sales without filters
   };
 
   useEffect(() => {
@@ -513,12 +579,6 @@ const page = () => {
       render: (amount) => `${parseFloat(amount || 0).toFixed(2)}`,
     },
     {
-      title: 'Customer',
-      dataIndex: 'customerName',
-      key: 'customerName',
-      width: '15%',
-    },
-    {
       title: 'Count',
       key: 'itemsCount',
       width: '10%',
@@ -527,7 +587,7 @@ const page = () => {
     {
       title: 'Action',
       key: 'action',
-      width: '10%',
+      width: '20%',
       render: (_, record) => (
         <Button 
           type="primary" 
@@ -823,7 +883,7 @@ const page = () => {
         </tbody>
         <tfoot className="bg-gray-50">
           <tr>
-            <td colSpan="4" className="px-4 py-3 text-right font-semibold text-gray-900">Grand Total:</td>
+            <td colSpan="6" className="px-4 py-3 text-right font-semibold text-gray-900">Grand Total:</td>
             <td className="px-4 py-3 text-right font-bold text-gray-900">{grandTotal.toFixed(2)}</td>
             <td></td>
           </tr>
@@ -851,12 +911,124 @@ const page = () => {
   </button>
 </div> }
 
-{/* All Sales Expandable Table */}
+{/* Updated Filter Section with Single Date */}
+<div className="mt-12 mb-6">
+  <div className="bg-white p-6 rounded-lg shadow-md">
+    <h3 className="text-lg font-semibold mb-4">Filter Sales Orders</h3>
+    <div className="flex flex-wrap gap-4 items-end">
+      {/* Search by Sales Order Number */}
+      <div className="flex flex-col">
+        <label className="mb-2 text-sm font-medium text-gray-700">Search by Sales Order Number</label>
+        <input
+          type="text"
+          placeholder="Enter Sales Order Number"
+          value={searchText}
+          onChange={e => setSearchText(e.target.value)}
+          className="w-[300px] h-[33px] text-sm px-3 py-2 rounded shadow border border-gray-300 text-gray-700"
+          style={{ fontFamily: 'Poppins' }}
+        />                        
+      </div>
+
+      {/* Single Date Filter */}
+      <div className="flex flex-col">
+        <label className="mb-2 text-sm font-medium text-gray-700">Filter by Date</label>
+        <DatePicker
+          value={selectedDate}
+          onChange={handleDateChange}
+          style={{ width: 200, height: 33, fontFamily: 'Poppins' }}
+          format="YYYY-MM-DD"
+          placeholder="Select Date"
+          prefix={<CalendarOutlined />}
+        />
+      </div>
+
+      {/*Search Button*/}
+      <button
+        onClick={handleSearch}
+        style={{
+          backgroundColor: '#FC890D',
+          color: '#fff',
+          borderRadius: '6px',
+          padding: '0 16px',
+          height: '33px',
+          fontWeight: 400,
+          fontFamily: 'Poppins',
+          fontSize: '14px',
+          boxShadow: '0 2px 8px #f0f1f2',
+          border: 'none',
+          cursor: 'pointer',
+          transition: 'background 0.2s',
+        }}
+        onMouseOver={e => e.currentTarget.style.backgroundColor = '#FD9A2E'}
+        onMouseOut={e => e.currentTarget.style.backgroundColor = '#FC890D'}
+      >
+        Search
+      </button>
+
+      {/* Clear Filters Button */}
+      <button
+        onClick={clearFilters}
+        style={{
+          backgroundColor: '#AAA69F',
+          color: '#fff',
+          borderRadius: '6px',
+          padding: '0 16px',
+          height: '33px',
+          fontWeight: 400,
+          fontFamily: 'Poppins',
+          fontSize: '14px',
+          boxShadow: '0 2px 8px #f0f1f2',
+          border: 'none',
+          cursor: 'pointer',
+          transition: 'background 0.2s',
+        }}
+        onMouseOver={e => e.currentTarget.style.backgroundColor = '#646363'}
+        onMouseOut={e => e.currentTarget.style.backgroundColor = '#AAA69F'}
+      >
+        Clear Filters
+      </button>
+    </div>
+
+    {/* Updated Filter Results Summary */}
+    <div className="mt-4 text-sm text-gray-600">
+      {searchText || selectedDate ? (
+        <p>
+          Showing {filteredSales.length} of {allSales.length} Sales Orders
+          {searchText && ` matching "${searchText}"`}
+          {selectedDate && ` created on ${selectedDate.format('YYYY-MM-DD')}`}
+        </p>
+      ) : (
+        <p>Showing all {allSales.length} Sales Orders</p>
+      )}
+    </div>
+  </div>
+</div>
+
+{/* Order Type Filter Dropdown */}
 <div className="mt-12">
   <h2 className="text-xl font-bold mb-4 text-white">All Sales</h2>
+  <div className="mb-4 flex items-center gap-4">
+    <label className="text-white">Filter by Order Type:</label>
+    <Select
+      placeholder="All"
+      style={{ width: 180 }}
+      value={selectedOrderType || undefined}
+      onChange={value => setSelectedOrderType(value)}
+      allowClear
+    >
+      <Option value="CASH">CASH</Option>
+      <Option value="CREDIT">CREDIT</Option>
+    </Select>
+  </div>
   <Table 
     columns={mainColumns}
-    dataSource={allSales}
+    dataSource={
+      searchText || selectedDate || selectedOrderType
+        ? filteredSales.filter(sale =>
+            !selectedOrderType || sale.salesOrderType === selectedOrderType
+          )
+        : allSales
+    }
     expandable={{
       expandedRowRender,
       defaultExpandedRowKeys: [],

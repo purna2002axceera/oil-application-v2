@@ -45,6 +45,10 @@ const ReturnPage = () => {
   const [editingIndex, setEditingIndex] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [allReturns, setAllReturns] = useState([])
+  // Search/filter states
+  const [searchReturnNo, setSearchReturnNo] = useState('')
+  const [searchCreatedAt, setSearchCreatedAt] = useState('')
+  const [searchLoading, setSearchLoading] = useState(false)
 
   // Fetch all items and returns
   useEffect(() => {
@@ -65,11 +69,43 @@ const ReturnPage = () => {
   const fetchAllReturns = async () => {
     try {
       const res = await axios.get('http://localhost:8080/api/return')
-      // Reverse the array so the latest return is first
       setAllReturns(res.data.slice().reverse())
     } catch (err) {
       customToast('error', 'Failed to fetch returns')
     }
+  }
+
+  // Search API call
+  const fetchFilteredReturns = async (params = {}) => {
+    setSearchLoading(true)
+    try {
+      const query = new URLSearchParams({
+        page: 0,
+        size: 50,
+        sortBy: 'createdAt',
+        sortDir: 'desc',
+        ...(params.ReturnNo ? { ReturnNo: params.ReturnNo } : {}),
+        ...(params.CreatedAt ? { CreatedAt: params.CreatedAt } : {})
+      }).toString()
+      const res = await axios.get(`http://localhost:8080/api/return/allby?${query}`)
+      setAllReturns(res.data.content || [])
+    } catch (err) {
+      customToast('error', 'Failed to search returns')
+    }
+    setSearchLoading(false)
+  }
+
+  const handleSearch = () => {
+    fetchFilteredReturns({
+      ReturnNo: searchReturnNo,
+      CreatedAt: searchCreatedAt
+    })
+  }
+
+  const handleClearSearch = () => {
+    setSearchReturnNo('')
+    setSearchCreatedAt('')
+    fetchAllReturns()
   }
 
   // Generate next return order number
@@ -297,6 +333,8 @@ const ReturnPage = () => {
         {editingIndex !== null ? 'Update Return Item' : 'Return Items'}
       </h1>
 
+      
+
       {/* Form Section */}
       <div className="space-y-4 flex flex-col w-[60%] bg-[#3D3B3B] px-8 py-8 rounded-lg">
         <div className="flex flex-col gap-5 w-full">
@@ -417,6 +455,80 @@ const ReturnPage = () => {
           >
             {editingIndex !== null ? 'Cancel' : 'Reset'}
           </button>
+        </div>
+      </div>
+
+      {/* Search Bar Section */}
+      <div className="mb-8 mt-6">
+        <div className="bg-white p-6 rounded-lg shadow-md flex flex-wrap gap-4 items-end">
+          {/* Return No Input */}
+          <div className="flex flex-col">
+            <label className="mb-2 text-sm font-medium text-gray-700">Return No</label>
+            <input
+              type="text"
+              placeholder="Enter Return No"
+              value={searchReturnNo}
+              onChange={e => setSearchReturnNo(e.target.value)}
+              className="w-[180px] h-[33px] text-sm px-3 py-2 rounded shadow border border-gray-300 text-gray-700"
+            />
+          </div>
+          {/* Created At Input */}
+          <div className="flex flex-col">
+            <label className="mb-2 text-sm font-medium text-gray-700">Created At</label>
+            <input
+              type="date"
+              value={searchCreatedAt}
+              onChange={e => setSearchCreatedAt(e.target.value)}
+              className="w-[180px] h-[33px] text-sm px-3 py-2 rounded shadow border border-gray-300 text-gray-700"
+            />
+          </div>
+          {/* Search & Clear Buttons */}
+          <div className="flex gap-2">
+            <button
+              onClick={handleSearch}
+              disabled={searchLoading}
+              style={{
+                backgroundColor: '#FC890D',
+                color: '#fff',
+                borderRadius: '6px',
+                padding: '0 16px',
+                height: '33px',
+                fontWeight: 400,
+                fontFamily: 'Poppins',
+                fontSize: '14px',
+                boxShadow: '0 2px 8px #f0f1f2',
+                border: 'none',
+                cursor: searchLoading ? 'not-allowed' : 'pointer',
+                opacity: searchLoading ? 0.7 : 1,
+                transition: 'background 0.2s',
+              }}
+              onMouseOver={e => e.currentTarget.style.backgroundColor = '#FD9A2E'}
+              onMouseOut={e => e.currentTarget.style.backgroundColor = '#FC890D'}
+            >
+              {searchLoading ? 'Searching...' : 'Search'}
+            </button>
+            <button
+              onClick={handleClearSearch}
+              style={{
+                backgroundColor: '#AAA69F',
+                color: '#fff',
+                borderRadius: '6px',
+                padding: '0 16px',
+                height: '33px',
+                fontWeight: 400,
+                fontFamily: 'Poppins',
+                fontSize: '14px',
+                boxShadow: '0 2px 8px #f0f1f2',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'background 0.2s',
+              }}
+              onMouseOver={e => e.currentTarget.style.backgroundColor = '#646363'}
+              onMouseOut={e => e.currentTarget.style.backgroundColor = '#AAA69F'}
+            >
+              Clear
+            </button>
+          </div>
         </div>
       </div>
 
