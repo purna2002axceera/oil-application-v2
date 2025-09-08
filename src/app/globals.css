@@ -8,9 +8,31 @@
   font-weight: 500 !important;
 }
 
+/* Target the disabled select input */
+.ant-select-disabled .ant-select-selector {
+  color: #000000 !important;
+}
+
+/* Target the disabled placeholder text */
+.ant-select-disabled .ant-select-selection-placeholder {
+  color: #000000 !important;
+}
+
+/* Target the disabled selected value */
+.ant-select-disabled .ant-select-selection-item {
+  color: #000000 !important;
+}
+
 /* custom.css */
 .ant-select-item-option-content {
   font-family: 'Poppins', sans-serif !important;
+}
+
+.custom-pagination .ant-pagination-prev {
+  margin-right: 10px  !important;
+}
+.custom-pagination .ant-pagination-next {
+  margin-left: 10px  !important;
 }
 
 
@@ -26,6 +48,12 @@
 
 .custom-toast-body {
   font-size: 16px !important;
+}
+
+.nested-table .ant-table-thead > tr > th {
+  background-color: #2c2c2c; /* dark background */
+  color: white;               /* text color */
+  font-weight: bold;
 }
 
 /* Method 1: CSS Classes - Add this to your CSS file */

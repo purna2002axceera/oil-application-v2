@@ -5,7 +5,7 @@ import MainLayout from '../layouts/MainLayout'
 import axios from 'axios'
 import { DeleteOutlined, EditOutlined } from '@ant-design/icons'
 import { customToast } from '../utils/toast'
-import { Table, Button, Form, Input, InputNumber, Popconfirm, Typography, Select } from 'antd'
+import { Table, Button, Form, Input, InputNumber, Select, DatePicker, Popconfirm  } from 'antd'
 import CreateCustomer from '../components/CreateCustomer'
 import quantityCalculator from '../utils/quantityCalculator'
 
@@ -52,9 +52,9 @@ const page = () => {
     const [selectedItem, setSelectedItem] = useState('')
     const [itemUnitPrice, setItemUnitPrice] = useState('')
     const [isLoose, setIsLoose] = useState(false)
-    const [looseInLiters,setLooseInLiters ] = useState('')
-    const [looseInMili,setLooseInMili] = useState('')
-    const [orderType,setOrderType] = useState('')
+    const [looseInLiters, setLooseInLiters ] = useState('')
+    const [looseInMili, setLooseInMili] = useState('')
+    const [orderType, setOrderType] = useState('')
     const [totalPrice, setTotalPrice] = useState('')
     const [note, setNote] = useState('')
     const [salesItems, setSalesItems] = useState([])
@@ -62,6 +62,11 @@ const page = () => {
     const [allSales, setAllSales] = useState([])
     const [editingKey, setEditingKey] = useState('');
     const [showCreateCustomer, setCreateCustomer] = useState(false)
+    const [fixedOrderData, setFixedOrderData] = useState(false)
+    const [mounted, setMounted] = useState(false);
+    const [reportStartDate, setReportStartDate] = useState(null); // dayjs or null
+    const [reportEndDate, setReportEndDate] = useState(null);     // dayjs or null
+    const [reportLoading, setReportLoading] = useState(false);
 
   const getCurrentSalesNumber = async () => {
     try {
@@ -107,6 +112,10 @@ const page = () => {
   const handleAddCustomer = () => {
     setCreateCustomer(true);
   };
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const fetchItems = async () => {
     try {
@@ -189,6 +198,73 @@ const page = () => {
     }
   };
 
+  // Reset the two date pickers
+const clearReportDates = () => {
+  setReportStartDate(null);
+  setReportEndDate(null);
+};
+
+// Safely open a base64 PDF in a new tab
+const openPdfInNewTab = (pdfBase64) => {
+  try {
+    // Accept both raw base64 or data URLs
+    const clean = (pdfBase64 || '').includes(',')
+      ? pdfBase64.split(',').pop()
+      : pdfBase64;
+
+    const byteChars = atob(clean);
+    const byteNumbers = new Array(byteChars.length);
+    for (let i = 0; i < byteChars.length; i++) {
+      byteNumbers[i] = byteChars.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    const blob = new Blob([byteArray], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+
+    // Open in new tab
+    window.open(url, '_blank', 'noopener,noreferrer');
+
+    // Revoke later to free memory
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch (err) {
+    console.error('PDF open error:', err);
+    customToast('error', 'Could not open the PDF.');
+  }
+};
+
+// Call your API and open the returned PDF
+const generateSalesReport = async () => {
+  if (!reportStartDate || !reportEndDate) {
+    customToast('error', 'Please select both From Date and To Date.');
+    return;
+  }
+
+  const startDate = reportStartDate.format('YYYY-MM-DD');
+  const endDate = reportEndDate.format('YYYY-MM-DD');
+
+  setReportLoading(true);
+  try {
+    const url = `http://localhost:8080/api/reports/sales-orders`;
+    const res = await axios.get(url, {
+      params: { startDate, endDate },
+    });
+
+    const pdfBase64 = res?.data?.pdfBase64;
+    if (!pdfBase64) {
+      customToast('error', 'Report response did not include pdfBase64.');
+      return;
+    }
+
+    openPdfInNewTab(pdfBase64);
+    customToast('success', 'Report generated.');
+  } catch (error) {
+    console.error('Report error:', error);
+    customToast('error', error?.response?.data?.message || 'Failed to generate report.');
+  } finally {
+    setReportLoading(false);
+  }
+};
+
   useEffect(() => {
     getCurrentSalesNumber()
     fetchItems()
@@ -225,8 +301,7 @@ const page = () => {
     return item ? `${item.itemBrand.brandName} - ${item.itemCode}` : ''
   }
 
-  const resetForm = () => {
-    setCustomerName('')
+  const resetForAddItem = () =>{
     setQuantity('')
     setSelectedItem('')
     setItemUnitPrice('')
@@ -237,8 +312,22 @@ const page = () => {
     setLooseInMili('')
   }
 
+  const resetForm = () => {
+    setQuantity('')
+    setSelectedItem('')
+    setItemUnitPrice('')
+    setTotalPrice('')
+    setNote('')
+    setIsLoose(false)
+    setLooseInLiters('')
+    setLooseInMili('')
+    setOrderType('')
+    setCustomerName('')
+  }
+
   const resetAll = () => {
     resetForm()
+    setFixedOrderData(false)
     setSalesItems([])
     setGrandTotal(0)
     getCurrentSalesNumber()
@@ -250,12 +339,12 @@ const page = () => {
   }
 
   const handleAddItem = () => {
-    console.log(selectedItem, itemUnitPrice);
-    
     if (!selectedItem || !itemUnitPrice) {
       customToast('error', 'Please fill all fields')
       return
     }
+      
+    setFixedOrderData(true)
 
     if (isLoose) {
       if (!looseInMili || isNaN(looseInMili) || looseInMili <= 0) {
@@ -270,9 +359,7 @@ const page = () => {
     }
 
     let selectedCustomer = null;
-    if (customerName) {
-      selectedCustomer = customers.find(customer => customer.id === parseInt(customerName));
-    }
+    if (customerName) { selectedCustomer = customers.find(customer => customer.id === parseInt(customerName)) }
 
     // For loose, calculate liters
     let quantityMilliliters = null;
@@ -308,7 +395,7 @@ const page = () => {
 
     setSalesItems([...salesItems, newItem])
     customToast('success', 'Item added successfully')
-    resetForm()
+    resetForAddItem()
   }
 
   const handleRemoveItem = (index) => {
@@ -510,8 +597,12 @@ const page = () => {
       dataIndex: 'totalAmount',
       key: 'totalAmount',
       width: '15%',
-      render: (amount) => `${parseFloat(amount || 0).toFixed(2)}`,
-    },
+      render: (amount) => {
+        const value = parseFloat(amount || 0);
+        return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      },
+    }
+,    
     {
       title: 'Customer',
       dataIndex: 'customerName',
@@ -529,13 +620,23 @@ const page = () => {
       key: 'action',
       width: '10%',
       render: (_, record) => (
-        <Button 
-          type="primary" 
-          danger
-          icon={<DeleteOutlined />} 
-          onClick={() => handleDeleteSale(record.id)}
-          size="small"
-        />
+        <Popconfirm
+          title="Delete Sale"
+          description="Are you sure to delete this sales order?"
+          onConfirm={() => handleDeleteSale(record.id)}
+          okText="Confirm"
+          cancelText="Cancel"
+          okButtonProps={{ className: "custom-popconfirm-btn-ok" }}
+          cancelButtonProps={{ className: "custom-popconfirm-btn-cancel" }}
+        >
+          <Button 
+            type="primary" 
+            danger
+            icon={<DeleteOutlined />} 
+            size="small"
+            style={{ borderRadius: 50, padding: 15 }}
+          />
+        </Popconfirm>
       ),
     }
   ];
@@ -551,6 +652,7 @@ const page = () => {
         columns={mergedNestedColumns}
         pagination={false}
         size="small"
+        className="nested-table" 
         rowClassName="editable-row"
       />
     </Form>
@@ -558,12 +660,13 @@ const page = () => {
 
   return (
      <MainLayout>
-         <h1  className="text-2xl font-bold mb-6 w-full py-4 px-6 rounded-lg" 
+         <h1  className="text-2xl font-bold mb-6 w-full py-4 px-6" 
           style={{  background: 'linear-gradient(90deg, #D4D2D2 0%, #665E5E 100%)',  color: '#515151' }}
          >
             Sales Order
         </h1>
           {/* Form Section */}
+       { mounted && <div className='flex gap-5'>
         <div className='flex flex-col w-[60%] bg-[#3D3B3B] gap-2 px-8 py-8 rounded-lg'>
          <div className="flex w-full flex-col gap-1">
            <label className='mb-1 text-white'>Sales Number</label>
@@ -579,6 +682,7 @@ const page = () => {
       <label className="mb-1 block text-white">Select Order Type</label>
       <Select
         placeholder="Choose Order Type"
+        disabled={fixedOrderData}
         style={{ flex: 1, height: 48, borderRadius: 9, background: '#fff', fontFamily:'Poppins', width:'100%' }}
         dropdownStyle={{ borderRadius: 8, background: '#fff', padding: 8 }}
         value={orderType || undefined} 
@@ -593,10 +697,11 @@ const page = () => {
         <div className="flex items-center gap-2 space-x-2">
             <Select
               value={customerName || undefined}
+              disabled={fixedOrderData}
               onChange={(value) => setCustomerName(value)}
               placeholder="Select Customer"
               className='!shadow-md border-0'
-              style={{ flex: 1, height: 48, borderRadius: 9, background: '#fff', fontFamily:'Poppins' }}
+              style={{ flex: 1, height: 48, borderRadius: 9, background: '#fff', fontFamily:'Poppins'}}
               dropdownStyle={{ borderRadius: 8, background: '#fff', padding: 8 }}
             >
               {customers.length === 0 && (
@@ -614,7 +719,7 @@ const page = () => {
                 </Select.Option>
               ))}
             </Select>
-            <button onClick={handleAddCustomer} className="w-8 h-8 bg-black text-white rounded-full flex items-center justify-center text-sm font-bold shadow-md hover:bg-gray-800 transition-colors" >
+            <button onClick={handleAddCustomer} className="w-8 h-8 bg-black cursor-pointer text-white rounded-full flex items-center justify-center text-sm font-bold shadow-md hover:bg-[#6B6B6B] transition-colors" >
               +
             </button>
             {showCreateCustomer && (
@@ -684,20 +789,20 @@ const page = () => {
                 style={{
                     width: "100%", 
                     height: 48,
-                    borderRadius: 12,
+                    display: 'flex',
+                    alignItems: 'center',
+                    borderRadius: 7,
                     fontFamily: "Poppins, sans-serif",
                     fontSize: 16 }}
-                inputStyle={{
+                    inputStyle={{
                     fontFamily: "Poppins, sans-serif",
                     fontSize: 16,
                    }}
               />
-
       </div>
        )
        }
 
-    
  
 <div className="flex w-full flex-col gap-1">
     <label className='mb-1 text-white'>Item Unit Price</label>
@@ -711,10 +816,12 @@ const page = () => {
                 style={{
                     width: "100%", 
                     height: 48,
-                    borderRadius: 12,
+                    borderRadius: 7,
+                    display: 'flex',
+                    alignItems: 'center',
                     fontFamily: "Poppins, sans-serif",
                     fontSize: 16 }}
-                inputStyle={{
+                    inputStyle={{
                     fontFamily: "Poppins, sans-serif",
                     fontSize: 16,
                    }}
@@ -732,10 +839,12 @@ const page = () => {
                 style={{
                     width: "100%", 
                     height: 48,
-                    borderRadius: 12,
+                    borderRadius: 7,
+                    display: 'flex',
+                    alignItems: 'center',
                     fontFamily: "Poppins, sans-serif",
                     fontSize: 16 }}
-                inputStyle={{
+                    inputStyle={{
                     fontFamily: "Poppins, sans-serif",
                     fontSize: 16,
                    }}
@@ -757,20 +866,62 @@ const page = () => {
 <div className="flex gap-4 mt-6">
   <button
     type="button"
-    onClick={resetForm}
-    className="px-6 py-3 bg-[#AAA69F] text-white rounded-lg shadow-md hover:bg-[#968D86] transition-colors"
+    onClick={ resetForAddItem }
+    className="px-6 py-3 bg-[#6B6B6B] text-white rounded-lg shadow-md hover:bg-[#646363] transition-colors cursor-pointer"
   >
     Cancel
   </button>
   <button
     type="button"
     onClick={handleAddItem}
-    className="px-6 py-3 bg-[#FC890D] text-white rounded-lg shadow-md hover:bg-[#FD9A2E] transition-colors"
+    className="px-6 py-3 bg-[#FC890D] cursor-pointer text-white rounded-lg shadow-md hover:bg-[#FD9A2E] transition-colors"
   >
     Add Item
   </button>
 </div>
+ 
 </div>
+<div className="h-[10%] w-[40%] flex flex-col gap-5 bg-white/5 px-8 py-8 rounded-lg">
+  <div className="flex w-full gap-3">
+    <div className="flex flex-col w-full">
+      <label className="mb-1 text-white">From Date</label>
+      <DatePicker
+        value={reportStartDate}
+        onChange={(d) => setReportStartDate(d)}
+        format="YYYY-MM-DD"
+        style={{ height: 48,  fontFamily: "Poppins, sans-serif", }}
+        inputReadOnly
+      />
+    </div>
+
+    <div className="flex flex-col w-full">
+      <label className="mb-1 text-white">To Date</label>
+      <DatePicker
+        value={reportEndDate}
+        onChange={(d) => setReportEndDate(d)}
+        format="YYYY-MM-DD"
+        style={{ height: 48,  fontFamily: "Poppins, sans-serif", }}
+        inputReadOnly
+      />
+    </div>
+  </div>
+   <div className="flex gap-2 ml-auto">
+      <Button
+        type="primary"
+        onClick={generateSalesReport}
+        loading={reportLoading}
+        disabled={!reportStartDate || !reportEndDate}
+        className="bg-[#0d5dfc] !border-none hover:bg-[#376cff]  disabled:!bg-[#538fff] disabled:!text-[#f8f8f8] disabled:!cursor-not-allowed"
+        style={{ height: 48,  fontFamily: "Poppins, sans-serif", }}
+      >
+        Generate Sales Report
+      </Button>
+    </div>
+</div>
+
+
+ </div>
+ }
 
 {/* Items Table */}
 {salesItems.length > 0 && (
@@ -852,7 +1003,7 @@ const page = () => {
 </div> }
 
 {/* All Sales Expandable Table */}
-<div className="mt-12">
+{ mounted && <div className="mt-12">
   <h2 className="text-xl font-bold mb-4 text-white">All Sales</h2>
   <Table 
     columns={mainColumns}
@@ -867,7 +1018,7 @@ const page = () => {
     className="text-base"
     bordered
   />
-</div>
+</div> }
 
     </MainLayout>
 

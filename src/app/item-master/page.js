@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Table, Button, Popconfirm, InputNumber, Select } from 'antd';
-import { EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { Table, Button, Popconfirm, InputNumber, Select, Spin, Flex } from 'antd';
+import { EditOutlined, DeleteOutlined, LoadingOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import CreateBrand from '../components/CreateBrand';
 import MainLayout from '../layouts/MainLayout';
@@ -24,6 +24,7 @@ export default function ItemMaster() {
   const [isUpdateMode, setIsUpdateMode] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -49,8 +50,6 @@ export default function ItemMaster() {
     const safeSortField = sortField || 'id';
     const safeSortDirection = sortDirection || 'DESC';
 
-    console.log('Fetching items with params:', { safePage, safeSize, safeSortField, safeSortDirection });
-
     const response = await fetch(
       `http://localhost:8080/api/item/paginated?page=${safePage}&size=${safeSize}&sortBy=${safeSortField}&sortDir=${safeSortDirection}`,
       {
@@ -61,8 +60,6 @@ export default function ItemMaster() {
       }
     );
       
-      console.log('Response status:', response.status);
-      
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Response error:', errorText);
@@ -70,7 +67,6 @@ export default function ItemMaster() {
       }
       
       const data = await response.json();
-      console.log('Fetched data:', data);
       
       // Handle different response structures
       if (data && typeof data === 'object') {
@@ -103,6 +99,10 @@ export default function ItemMaster() {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    setMounted(true);
   }, []);
 
   // Fetch brands function
@@ -309,10 +309,11 @@ export default function ItemMaster() {
       
       if (response.data?.id) {
         customToast('success', 'Brand Deleted Successfully');
-        await fetchBrands(); // Refresh brands list
+        setSelectedBrand('');
+        await fetchBrands(); 
         if (selectedBrand === id.toString()) {
           setSelectedBrand('');
-          setMaterialCode(''); // Reset material code if selected brand was deleted
+          setMaterialCode(''); 
         }
       } else {
         customToast('error', 'Error when deleting brand');
@@ -378,6 +379,18 @@ export default function ItemMaster() {
       render: (value) => value ? value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "-"
     },
     {
+      title: 'Date',
+      dataIndex: 'createdDateTime',
+      key: 'createdDateTime',
+      width: 100,
+      sorter: (a, b) =>
+        new Date(a.createdDateTime).getTime() - new Date(b.createdDateTime).getTime(),
+      render: (value) => {
+        const date = new Date(value);
+        return date.toISOString().split('T')[0]; // shows YYYY-MM-DD
+      },
+    },    
+    {
       title: 'Action', 
       key: 'action', 
       width: 120,
@@ -424,7 +437,7 @@ export default function ItemMaster() {
     <MainLayout>
       {/* Header */}
       <h1
-        className="text-2xl font-bold mb-6 w-full py-4 px-6 rounded-lg"
+        className="text-2xl font-bold mb-6 w-full py-4 px-6"
         style={{
           background: 'linear-gradient(90deg, #D4D2D2 0%, #665E5E 100%)',
           color: '#515151'
@@ -434,7 +447,7 @@ export default function ItemMaster() {
       </h1>
 
       {/* Form Section */}
-      <div className="space-y-4 flex flex-col w-[60%] bg-[#3D3B3B] px-8 py-8 rounded-lg">
+     { mounted && <div className="space-y-4 flex flex-col w-[60%] bg-[#3D3B3B] px-8 py-8 rounded-lg">
 
         <div className="flex flex-col gap-5 w-full">
           <div className='flex flex-col w-full'>
@@ -447,6 +460,7 @@ export default function ItemMaster() {
                 className='!shadow-md border-0'
                 style={{ flex: 1, height: 48, borderRadius: 9, background: '#fff', boxShadow: '0 2px 8px #f0f1f2', fontFamily: 'Poppins' }}
                 loading={loading}
+                disabled={isUpdateMode}
               >
                 {brands.length === 0 && (
                   <Select.Option disabled key="no-brands">No Brands</Select.Option>
@@ -474,7 +488,7 @@ export default function ItemMaster() {
               </Select>
               <button 
                 onClick={handleAddBrand} 
-                className="w-8 h-8 bg-black text-white rounded-full flex items-center justify-center text-sm font-bold shadow-md hover:bg-gray-300 transition-colors"
+                className="w-8 h-8 bg-black cursor-pointer text-white rounded-full flex items-center justify-center text-sm font-bold shadow-md hover:bg-[#6B6B6B] transition-colors"
                 disabled={loading}
               >
                 +
@@ -490,7 +504,7 @@ export default function ItemMaster() {
               value={pNumber}
               onChange={(e) => setPNumber(e.target.value)}
               className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-white"
-              disabled={loading}
+              disabled={loading || isUpdateMode}
             />
           </div>
 
@@ -499,6 +513,7 @@ export default function ItemMaster() {
             <Select
               value={lNumber || undefined}
               onChange={(value) => setLNumber(value)}
+              disabled={isUpdateMode}
               placeholder="Select L Number"
               className='!shadow-md border-0'
               style={{ width: '100%', height: 48, borderRadius: 9, background: '#fff', boxShadow: '0 2px 8px #f0f1f2', fontFamily: 'Poppins' }}
@@ -540,7 +555,9 @@ export default function ItemMaster() {
             style={{
                 width: "100%", 
                 height: 48,
-                borderRadius: 12,
+                display: 'flex',
+                alignItems: 'center',
+                borderRadius: 7,
                 fontFamily: "Poppins, sans-serif",
                 fontSize: 16 }}
             inputStyle={{
@@ -558,11 +575,13 @@ export default function ItemMaster() {
              onChange={(value) => setRetailAmount(value)}
              formatter={(value) => value?.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
              parser={(value) => value.replace(/\$\s?|(,*)/g, "")}
-             className="w-full px-4 py-3 rounded-lg shadow-md border-0 bg-white"
+             className="w-full px-4 py-3 rounded-sm shadow-md border-0 bg-white"
              style={{
               width: "100%", 
               height: 48,
-              borderRadius: 12,
+              display: 'flex',
+              alignItems: 'center',
+              borderRadius: 7,
               fontFamily: "Poppins, sans-serif",
               fontSize: 16 }}
               inputStyle={{
@@ -571,28 +590,28 @@ export default function ItemMaster() {
               disabled={loading}
               />
            </div>
-          </div>
+          </div> 
 
         {/* Action Buttons */}
         <div className="flex space-x-4 pt-4">
           <button
             onClick={handleAddItem}
-            className="px-6 py-3 w-[200px] bg-[#FC890D] text-white rounded-lg shadow-md hover:bg-[#fc890de9] transition-colors disabled:opacity-50"
+            className="px-6 py-3 w-[200px] cursor-pointer bg-[#FC890D] text-white rounded-lg shadow-md hover:bg-[#fc890de9] transition-colors disabled:opacity-50"
             disabled={loading}
           >
             {loading ? 'Processing...' : (isUpdateMode ? 'Save Changes' : 'Add Item')}
           </button>
           <button
             onClick={handleReset}
-            className="px-6 py-3 w-[120px] bg-[#AAA69F] text-white rounded-lg shadow-md hover:bg-[#646363] transition-colors disabled:opacity-50"
+            className="px-6 py-3 w-[120px] cursor-pointer bg-[#6B6B6B] text-white rounded-lg shadow-md hover:bg-[#646363] transition-colors disabled:opacity-50"
             disabled={loading}
           >
             {isUpdateMode ? 'Cancel' : 'Reset'}
           </button>
         </div>
-      </div>
+      </div> }
 
-      <div className="mt-8">
+    { mounted && <div className="mt-8">
         <h2 className="text-xl text-white font-bold mb-4">Items List</h2>
         <Table
           dataSource={items}
@@ -603,16 +622,13 @@ export default function ItemMaster() {
             current: currentPage,
             pageSize: pageSize,     
             total: totalItems,
-            showSizeChanger: false,
-            showQuickJumper: true,
-            showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} items`
           }}
           onChange={handleTableChange}
           size="large"
           className="text-base"
           scroll={{ x: 1000 }}
          />
-      </div>
+      </div> }
 
       {/* Create Brand Modal */}
       {showCreateBrand && (

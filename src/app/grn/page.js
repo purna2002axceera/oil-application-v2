@@ -56,6 +56,7 @@ const page = () => {
     const [grandTotal, setGrandTotal] = useState(0)
     const [allGrns, setAllGrns] = useState([])
     const [editingKey, setEditingKey] = useState('');
+    const [mounted, setMounted] = useState(false);
     
     // Edit modal states
     const [isEditModalVisible, setIsEditModalVisible] = useState(false)
@@ -117,6 +118,10 @@ const page = () => {
     }
   };
 
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const fetchAllGrns = async () => {
     try {
       const response = await fetch('http://localhost:8080/api/grn');
@@ -134,9 +139,7 @@ const page = () => {
           }))
         }
       })
-      console.log('created at:', grnData)
       setAllGrns(grnData);
-      console.log('All GRNs:', data)
     } catch (error) {
       console.error('Error fetching GRNs:', error);
     }
@@ -237,7 +240,7 @@ const page = () => {
     if (!selectedItem || !supplierName || !quantity || !itemUnitPrice || !invoiceNumber) {
       customToast('error', 'Please fill all fields including invoice number')
       return
-    }
+    }  
 
     const newItem = {
       itemId: parseInt(selectedItem),
@@ -524,55 +527,55 @@ const page = () => {
       title: 'Purchase Number',
       dataIndex: 'grnNumber',
       key: 'grnNumber',
-      width: '15%',
+      width: '20%',
     },
     {
       title: 'Invoice Number',
       dataIndex: 'invoiceNumber',
       key: 'invoiceNumber',
-      width: '15%',
+      width: '20%',
     },
     {
       title: 'Created At',
       dataIndex: 'createdAt',
       key: 'createdAt',
-      width: '15%',
+      width: '20%',
     },
     {
       title: 'Total Amount',
       dataIndex: 'totalAmount',
       key: 'totalAmount',
-      width: '15%',
+      width: '20%',
       render: (value) => value ? value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "-",
     },
     {
       title: 'Items Count',
       key: 'itemsCount',
-      width: '15%',
+      width: '20%',
       render: (_, record) => record.items?.length || 0,
     },
-    {
-      title: 'Action',
-      key: 'action',
-      width: '25%',
-      render: (_, record) => (
-        <div className="flex gap-2">
-          {/* <Button 
-            type="primary" 
-            icon={<EditOutlined />} 
-            onClick={() => handleEditGrn(record)}
-            size="small"
-          /> */}
-          <Button 
-            type="primary" 
-            danger
-            icon={<DeleteOutlined />} 
-            onClick={() => handleDeleteGrn(record.id)}
-            size="small"
-          />
-        </div>
-      ),
-    }
+    // {
+    //   title: 'Action',
+    //   key: 'action',
+    //   width: '25%',
+    //   render: (_, record) => (
+    //     <div className="flex gap-2">
+    //       {/* <Button 
+    //         type="primary" 
+    //         icon={<EditOutlined />} 
+    //         onClick={() => handleEditGrn(record)}
+    //         size="small"
+    //       /> */}
+    //       <Button 
+    //         type="primary" 
+    //         danger
+    //         icon={<DeleteOutlined />} 
+    //         onClick={() => handleDeleteGrn(record.id)}
+    //         size="small"
+    //       />
+    //     </div>
+    //   ),
+    // }
   ];
 
   const expandedRowRender = (record) => (
@@ -586,6 +589,7 @@ const page = () => {
         columns={mergedNestedColumns}
         pagination={false}
         size="small"
+        className="nested-table" 
         rowClassName="editable-row"
       />
     </Form>
@@ -593,13 +597,13 @@ const page = () => {
 
   return (
      <MainLayout>
-         <h1  className="text-2xl font-bold mb-6 w-full py-4 px-6 rounded-lg" 
+         <h1  className="text-2xl font-bold mb-6 w-full py-4 px-6" 
           style={{  background: 'linear-gradient(90deg, #D4D2D2 0%, #665E5E 100%)',  color: '#515151' }}
          >
             Purchase Order
         </h1>
           {/* Form Section */}
-      <div className='space-y-4 flex flex-col w-[60%] bg-[#3D3B3B] px-8 py-8 rounded-lg'>
+     { mounted && <div className='space-y-4 flex flex-col w-[60%] bg-[#3D3B3B] px-8 py-8 rounded-lg'>
        <div className="flex w-full flex-col gap-1">
            <label className='mb-1 text-white'>Purchase Order Number</label>
              <input
@@ -636,21 +640,21 @@ const page = () => {
         <div className="flex w-full flex-col gap-1">
           <label className='mb-1 text-white'>Select Item</label>
           <Select
-      showSearch
-       size="large"
-      style={{ width: '100%' }}
-      placeholder="Select an item"
-      value={selectedItem || undefined}
-      onChange={(value) => handleSelectItem(value)}
-      optionFilterProp="label"
-      filterSort={(optionA, optionB) =>
-        (optionA?.label ?? '').toLowerCase().localeCompare((optionB?.label ?? '').toLowerCase())
-      }
-      options={items.map((item) => ({
-        value: item.id,
-        label: `${item.itemBrand.brandName} - ${item.itemCode}`,
-      }))}
-    />
+            showSearch
+            size="large"
+            style={{ width: '100%', height: 48 }}
+            placeholder="Select an item"
+            value={selectedItem || undefined}
+            onChange={(value) => handleSelectItem(value)}
+            optionFilterProp="label"
+            filterSort={(optionA, optionB) =>
+              (optionA?.label ?? '').toLowerCase().localeCompare((optionB?.label ?? '').toLowerCase())
+            }
+             options={items.map((item) => ({
+              value: item.id,
+              label: `${item.itemBrand.brandName} - ${item.itemCode}`,
+            }))}
+         />
     
        </div>
        <div className="flex w-full flex-col gap-1">
@@ -676,10 +680,12 @@ const page = () => {
         style={{
             width: "100%", 
             height: 48,
-            borderRadius: 12,
+            borderRadius: 7,
+            display: 'flex',
+            alignItems: 'center',
             fontFamily: "Poppins, sans-serif",
             fontSize: 16 }}
-        inputStyle={{
+            inputStyle={{
             fontFamily: "Poppins, sans-serif",
             fontSize: 16,
            }}
@@ -697,7 +703,9 @@ const page = () => {
         style={{
             width: "100%", 
             height: 48,
-            borderRadius: 12,
+            borderRadius: 7,
+            display: 'flex',
+            alignItems: 'center',
             fontFamily: "Poppins, sans-serif",
             fontSize: 16 }}
             inputStyle={{
@@ -708,26 +716,26 @@ const page = () => {
    </div>
 
 {/* Action Buttons */}
-<div className="flex gap-4 mt-6">
+<div className="flex gap-4 mt-5">
   <button
     type="button"
     onClick={resetForm}
-    className="px-6 py-3 bg-[#AAA69F] text-white rounded-lg shadow-md hover:bg-[#968D86] transition-colors"
+    className="px-6 py-3  bg-[#6B6B6B] text-white rounded-lg shadow-md hover:bg-[#646363] cursor-pointer transition-colors"
   >
     Cancel
   </button>
   <button
     type="button"
     onClick={handleAddItem}
-    className="px-6 py-3 bg-[#FC890D] text-white rounded-lg shadow-md hover:bg-[#FD9A2E] transition-colors"
+    className="px-6 py-3 bg-[#FC890D] text-white rounded-lg shadow-md hover:bg-[#fc890de9] cursor-pointer  transition-colors"
   >
     Add Item
   </button>
 </div>
-</div>
+</div> }
 
 {/* Items Table */}
-{grnItems.length > 0 && (
+{ mounted && grnItems.length > 0 && (
   <div className="mt-8">
     <h2 className="text-xl font-semibold text-white mb-4">Added Items</h2>
     <div className="overflow-x-auto">
@@ -799,7 +807,7 @@ const page = () => {
     onClick={handleCreateGRN}
     className="px-6 py-3 bg-[#FC890D] text-white rounded-lg shadow-md hover:bg-[#FD9A2E] transition-colors"
   >
-    Create GRN
+    Create Sales Order
   </button>
 </div> }
 
@@ -905,9 +913,9 @@ const page = () => {
     </div>
 
     {/* Edit Items Table */}
-    {editGrnItems.length > 0 && (
+    { mounted && editGrnItems.length > 0 && (
       <div className="mt-6">
-        <h4 className="text-md font-semibold mb-4">Items in GRN</h4>
+        <h4 className="text-md font-semibold mb-4">Items in Sales Order</h4>
         <div className="overflow-x-auto">
           <table className="w-full bg-white rounded-lg shadow-md border">
             <thead className="bg-gray-50">
@@ -973,14 +981,14 @@ const page = () => {
         className="bg-[#FC890D] hover:bg-[#FD9A2E]"
         disabled={editGrnItems.length === 0}
       >
-        Update GRN
+        Update Purchase Order
       </Button>
     </div>
   </Form>
 </Modal>
 
 {/* Updated Filter Section with Single Date */}
-<div className="mt-12 mb-6">
+{ mounted && <div className="mt-12 mb-6">
   <div className="bg-white p-6 rounded-lg shadow-md">
     <h3 className="text-lg font-semibold mb-4">Filter Purchase Orders</h3>
     <div className="flex flex-wrap gap-4 items-end">
@@ -1024,20 +1032,19 @@ const page = () => {
     <div className="mt-4 text-sm text-gray-600">
       {searchText || selectedDate ? (
         <p>
-          Showing {filteredGrns.length} of {allGrns.length} GRNs
           {searchText && ` matching "${searchText}"`}
           {selectedDate && ` created on ${selectedDate.format('YYYY-MM-DD')}`}
         </p>
       ) : (
-        <p>Showing all {allGrns.length} GRNs</p>
+        <p>Showing all {allGrns.length} SOs</p>
       )}
     </div>
   </div>
-</div>
+</div> }
 
 {/* All GRNs Expandable Table with Enhanced Pagination */}
-<div className="mt-6">
-  <h2 className="text-xl font-bold text-white mb-4">All GRNs</h2>
+{ mounted && <div className="mt-6">
+  <h2 className="text-xl font-bold text-white mb-4">All Purchase Orders</h2>
   <Table 
     columns={mainColumns}
     dataSource={filteredGrns}
@@ -1050,11 +1057,6 @@ const page = () => {
       current: currentPage,
       pageSize: pageSize,
       total: filteredGrns.length,
-      showSizeChanger: true,
-      showQuickJumper: true,
-      showTotal: (total, range) => 
-        `${range[0]}-${range[1]} of ${total} items`,
-      pageSizeOptions: ['5', '10', '20', '50', '100'],
       onChange: (page, size) => {
         setCurrentPage(page)
         setPageSize(size)
@@ -1069,10 +1071,8 @@ const page = () => {
     bordered
     onChange={handleTableChange}
   />
-</div>
-
+</div> }
     </MainLayout>
-
   )
 }
 

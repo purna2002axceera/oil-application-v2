@@ -64,7 +64,7 @@ const CreateCustomer = ({fetchCustomers, setCreateCustomer}) => {
 
   return (
     <div className="fixed inset-0 bg-black flex items-center justify-center z-50" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
-      <div className="bg-white rounded-lg p-6 shadow-xl max-w-md w-full mx-4">
+      <div className=" rounded-lg p-6 shadow-xl max-w-md w-full mx-4 bg-[#ccc]">
         <h1 className="text-2xl font-bold mb-6">Add New Customer</h1>
         
         <div className="space-y-4">
@@ -73,7 +73,7 @@ const CreateCustomer = ({fetchCustomers, setCreateCustomer}) => {
             placeholder="Enter Customer Name *"
             value={customerName}
             onChange={(e) => setCustomerName(e.target.value)}
-            className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0"
+            className="w-full bg-white px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0"
           />
         
           <input
@@ -81,7 +81,7 @@ const CreateCustomer = ({fetchCustomers, setCreateCustomer}) => {
             placeholder="Enter Customer Phone *"
             value={customerPhone}
             onChange={(e) => setCustomerPhone(e.target.value)}
-            className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0"
+            className="w-full bg-white px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0"
           />
           
           {error && (

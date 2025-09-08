@@ -3,19 +3,23 @@
 import { useRouter, usePathname } from 'next/navigation';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import '../globals.css'
 
 export default function MainLayout({ children }) {
   const router = useRouter();
   const pathname = usePathname();
 
+  const logout=() =>{ localStorage.clear() } 
+
   const navLinks = [
     { name: 'Item Master', path: '/item-master' },
     { name: 'Purchase Order', path: '/grn' },
     { name: 'Sales Order', path: '/sales' },
-    { name: 'Return', path: '/return' },
-    { name: 'Logout', path: '/logout' }
+    { name: 'Return Note', path: '/return' },
+    { name: 'Credit Customer', path: '/credit-customer' },
+    { name: 'Logout', path: '/login' }
   ];
+
+
 
   return (
     <div className="flex h-screen">
@@ -27,25 +31,34 @@ export default function MainLayout({ children }) {
           Oil Mart
         </div>
 
-        <div className="space-y-2 text-white">
+        <div className="space-y-4 text-white">
           {navLinks.map((link, index) => {
             const isActive = pathname === link.path;
             return (
-              <a
-                key={`${link.path}-${index}`}
-                href={link.path}
-                className={`block px-4 py-2 rounded transition font-medium ${
-                  isActive ? 'bg-[#2c2c2c] font-bold' : 'hover:bg-[#4c4c4c]' }`}
-              >
-                {link.name}
-              </a>
+             <a
+  key={`${link.path}-${index}`}
+  onClick={() => {
+    if (link.name === 'Logout') {
+      logout();
+      router.push('/login'); // make sure to navigate after clearing
+    }
+  }}
+  href={link.name === 'Logout' ? undefined : link.path} // prevent default navigation for logout
+  className={`block px-4 py-2 rounded transition font-medium
+    ${isActive 
+      ? 'bg-[#2c2c2c] font-bold border-0' 
+      : 'border border-[#969696] hover:bg-[#4c4c4c]'
+    }`}
+>
+  {link.name}
+</a>
+
             );
           })}
         </div>
       </aside>
 
       <main className="flex-1 p-6 bg-[#1F1C1C] overflow-auto">{ children }</main>
-
       <ToastContainer />
     </div>
   );

@@ -3,35 +3,9 @@
 import React, { useEffect, useState } from 'react'
 import MainLayout from '../layouts/MainLayout'
 import axios from 'axios'
-import { DeleteOutlined, EditOutlined } from '@ant-design/icons'
 import { customToast } from '../utils/toast'
 import { Table, Button, InputNumber, Select, Popconfirm } from 'antd'
 
-const { Option } = Select
-
-const EditableCell = ({
-  editing,
-  dataIndex,
-  title,
-  inputType,
-  record,
-  index,
-  children,
-  ...restProps
-}) => {
-  const inputNode = inputType === 'number' ? <InputNumber /> : <input />
-  return (
-    <td {...restProps}>
-      {editing ? (
-        <div style={{ margin: 0 }}>
-          {inputNode}
-        </div>
-      ) : (
-        children
-      )}
-    </td>
-  )
-}
 
 const ReturnPage = () => {
   const [items, setItems] = useState([])
@@ -45,6 +19,7 @@ const ReturnPage = () => {
   const [editingIndex, setEditingIndex] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [allReturns, setAllReturns] = useState([])
+  const [mounted, setMounted] = useState(false);
 
   // Fetch all items and returns
   useEffect(() => {
@@ -52,6 +27,10 @@ const ReturnPage = () => {
     fetchAllReturns()
     getCurrentReturnNumber()
   }, [])
+
+  useEffect(() => {
+      setMounted(true);
+    }, []);
 
   const fetchItems = async () => {
     try {
@@ -181,21 +160,6 @@ const ReturnPage = () => {
     resetForm()
   }
 
-  const handleRemoveItem = (index) => {
-    const updatedItems = returnItems.filter((_, i) => i !== index)
-    setReturnItems(updatedItems)
-    customToast('success', 'Item removed')
-  }
-
-  const handleUpdateItem = (index) => {
-    const item = returnItems[index]
-    setSelectedItem(item.itemId.toString())
-    setIsLoose(Boolean(item.isLoose))
-    setQuantity(item.quantity?.toString() || '')
-    setLooseInMili(item.quantityMiliLitres?.toString() || '')
-    setEditingIndex(index)
-  }
-
   const handleSubmitReturn = async () => {
     if (returnItems.length === 0) {
       customToast('error', 'Please add at least one item')
@@ -221,7 +185,8 @@ const ReturnPage = () => {
       resetAll()
       fetchAllReturns()
     } catch (err) {
-      customToast('error', 'Failed to submit return')
+      console.log(err);
+      customToast('error', err.response?.data?.message || 'Failed to submit return')
     }
     setIsSubmitting(false)
   }
@@ -233,39 +198,6 @@ const ReturnPage = () => {
     { title: 'Quantity ML', dataIndex: 'quantityMiliLitres', key: 'quantityMiliLitres', render: (q, r) => r.isLoose ? q : '-', width: 120 },
     { title: 'Quantity L', dataIndex: 'quantityLitres', key: 'quantityLitres', render: (q, r) => r.isLoose ? q : '-', width: 120 },
     { title: 'Is Loose', dataIndex: 'isLoose', key: 'isLoose', render: v => v ? 'Yes' : 'No', width: 120 },
-    {
-      title: 'Actions',
-      key: 'actions',
-      width: 120,
-      render: (_, record, idx) => (
-        <div className="flex gap-2 justify-center">
-          <Button 
-            type="primary" 
-            icon={<EditOutlined />} 
-            size="small" 
-            onClick={() => handleUpdateItem(idx)} 
-            style={{ borderRadius: 50, padding: '0 15px' }}
-          />
-          <Popconfirm
-            title="Remove Item"
-            description="Are you sure to remove this item?"
-            onConfirm={() => handleRemoveItem(idx)}
-            okText="Confirm"
-            cancelText="Cancel"
-            okButtonProps={{ className: "custom-popconfirm-btn-ok" }}
-            cancelButtonProps={{ className: "custom-popconfirm-btn-cancel" }}
-          >
-            <Button 
-              type="primary" 
-              danger 
-              icon={<DeleteOutlined />} 
-              size="small" 
-              style={{ borderRadius: 50, padding: '0 15px' }}
-            />
-          </Popconfirm>
-        </div>
-      )
-    }
   ]
 
   const mainColumns = [
@@ -285,6 +217,7 @@ const ReturnPage = () => {
       columns={nestedColumns}
       pagination={false}
       size="small"
+      className="nested-table" 
       rowClassName="editable-row"
     />
   )
@@ -292,15 +225,15 @@ const ReturnPage = () => {
   return (
     <MainLayout>
       {/* Header */}
-      <h1 className="text-2xl font-bold mb-6 w-full py-4 px-6 rounded-lg"
+      <h1 className="text-2xl font-bold mb-6 w-full py-4 px-6"
         style={{ background: 'linear-gradient(90deg, #D4D2D2 0%, #665E5E 100%)', color: '#515151' }}>
         {editingIndex !== null ? 'Update Return Item' : 'Return Items'}
       </h1>
 
       {/* Form Section */}
-      <div className="space-y-4 flex flex-col w-[60%] bg-[#3D3B3B] px-8 py-8 rounded-lg">
-        <div className="flex flex-col gap-5 w-full">
-          <div className='flex flex-col w-full'>
+     { mounted && <div className="space-y-4 flex flex-col w-[60%] bg-[#3D3B3B] px-8 py-8 rounded-lg">
+        <div className="flex flex-col gap-3 w-full">
+          <div className='flex flex-col h-[80px] gap-1'>
             <label className='mb-1 text-white' style={{ fontFamily: 'Poppins, sans-serif' }}>Return Number</label>
             <input
               type="text"
@@ -309,14 +242,14 @@ const ReturnPage = () => {
               className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-gray-100"
               style={{ 
                 height: 48, 
-                borderRadius: 12, 
+                borderRadius: 7, 
                 fontFamily: 'Poppins, sans-serif', 
                 fontSize: 16 
               }}
             />
           </div>
 
-          <div className='flex flex-col w-full'>
+          <div className='flex flex-col h-[80px] gap-1'>
             <label className='mb-1 text-white' style={{ fontFamily: 'Poppins, sans-serif' }}>Select Item</label>
             <Select
               showSearch
@@ -332,17 +265,21 @@ const ReturnPage = () => {
                 boxShadow: '0 2px 8px #f0f1f2', 
                 fontFamily: 'Poppins, sans-serif' 
               }}
-              options={items.map(item => ({
-                value: item.id,
-                label: getItemName(item.id)
-              }))}
+              optionFilterProp="label"
+               filterSort={(optionA, optionB) =>
+                 (optionA?.label ?? '').toLowerCase().localeCompare((optionB?.label ?? '').toLowerCase())
+               }
+               options={items.map((item) => ({
+                 value: item.id,
+                 label: `${item.itemBrand.brandName} - ${item.itemCode}`,
+               }))}
               disabled={isSubmitting}
             />
           </div>
         </div>
 
         {/* Checkbox */}
-        <div className="flex items-center gap-2 py-4">
+        <div className="flex items-center gap-2 py-2">
           <input
             type="checkbox"
             checked={isLoose}
@@ -358,7 +295,7 @@ const ReturnPage = () => {
         {/* Quantity Inputs */}
         <div className="flex flex-col gap-5">
           {!isLoose && (
-            <div className="flex flex-col w-full">
+            <div className="flex flex-col gap-1 h-[80px] w-full">
               <label className="mb-1 text-white" style={{ fontFamily: 'Poppins, sans-serif' }}>Quantity</label>
               <InputNumber
                 min={1}
@@ -368,7 +305,7 @@ const ReturnPage = () => {
                 style={{
                   width: "100%", 
                   height: 48,
-                  borderRadius: 12,
+                  borderRadius: 7,
                   fontFamily: "Poppins, sans-serif",
                   fontSize: 16,
                   paddingTop:5
@@ -385,11 +322,15 @@ const ReturnPage = () => {
                 min={1}
                 value={looseInMili ? Number(looseInMili) : null}
                 onChange={(value) => setLooseInMili(value)}
+                 formatter={(value) => value?.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") }
+                 parser={(value) => value.replace(/\$\s?|(,*)/g, "")}
                 className="w-full"
                 style={{
-                  width: "100%", 
+                  width: "100%",
+                  display: 'flex',
+                  alignItems: 'center', 
                   height: 48,
-                  borderRadius: 12,
+                  borderRadius: 7,
                   fontFamily: "Poppins, sans-serif",
                   fontSize: 16 
                 }}
@@ -411,47 +352,67 @@ const ReturnPage = () => {
           </button>
           <button
             onClick={resetForm}
-            className="px-6 py-3 w-[120px] bg-[#AAA69F] text-white rounded-lg shadow-md hover:bg-[#646363] transition-colors disabled:opacity-50"
+            className="px-6 py-3 w-[120px] bg-[#6B6B6B] text-white rounded-lg shadow-md hover:bg-[#646363] transition-colors disabled:opacity-50"
             style={{ fontFamily: 'Poppins, sans-serif', fontSize: 16 }}
             disabled={isSubmitting}
           >
             {editingIndex !== null ? 'Cancel' : 'Reset'}
           </button>
         </div>
-      </div>
+      </div> }
 
       {/* Items Table */}
-      {returnItems.length > 0 && (
+      {/* Items Table */}
+      { mounted && returnItems.length > 0 && (
         <div className="mt-8">
           <h2 className="text-xl text-white font-bold mb-4" style={{ fontFamily: 'Poppins, sans-serif' }}>Added Items</h2>
-          <Table
-            dataSource={returnItems.map((item, index) => ({
-              ...item,
-              key: index
-            }))}
-            columns={nestedColumns}
-            pagination={false}
-            size="large"
-            className="text-base"
-            bordered
-            scroll={{ x: 1000 }}
-            summary={(pageData) => (
-              <Table.Summary.Row>
-                <Table.Summary.Cell index={0} colSpan={4}>
-                  <strong style={{ fontFamily: 'Poppins, sans-serif' }}>Total Items:</strong>
-                </Table.Summary.Cell>
-                <Table.Summary.Cell index={1}>
-                  <strong style={{ fontFamily: 'Poppins, sans-serif' }}>{grandTotal}</strong>
-                </Table.Summary.Cell>
-                <Table.Summary.Cell index={2}></Table.Summary.Cell>
-              </Table.Summary.Row>
-            )}
-          />
+          <div className="overflow-x-auto">
+            <table className="w-full bg-white rounded-lg shadow-md border">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Item</th>
+                  <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Quantity</th>
+                  <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Quantity ML</th>
+                  <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Quantity L</th>
+                  <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Is Loose</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {returnItems.map((item, index) => (
+                  <tr key={index} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-sm text-gray-900">{item.itemName}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900 text-center">
+                      {item.isLoose ? '-' : item.quantity}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-900 text-center">
+                      {item.isLoose ? item.quantityMiliLitres : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-900 text-center">
+                      {item.isLoose ? item.quantityLitres : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-900 text-center">
+                      {item.isLoose ? 'Yes' : 'No'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-gray-50">
+                <tr>
+                  <td colSpan="4" className="px-4 py-3 text-right font-semibold text-gray-900" style={{ fontFamily: 'Poppins, sans-serif' }}>
+                    Total Items:
+                  </td>
+                  <td className="px-4 py-3 text-center font-bold text-gray-900" style={{ fontFamily: 'Poppins, sans-serif' }}>
+                    {grandTotal}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
           
           <div className="flex space-x-4 mt-8">
             <button
               onClick={resetAll}
-              className="px-6 py-3 w-[120px] bg-[#AAA69F] text-white rounded-lg shadow-md hover:bg-[#646363] transition-colors disabled:opacity-50"
+              className="px-6 py-3 w-[120px] bg-[#6B6B6B] text-white rounded-lg shadow-md hover:bg-[#646363] transition-colors disabled:opacity-50"
               style={{ fontFamily: 'Poppins, sans-serif', fontSize: 16 }}
               disabled={isSubmitting}
             >
@@ -459,7 +420,7 @@ const ReturnPage = () => {
             </button>
             <button
               onClick={handleSubmitReturn}
-              className="px-6 py-3 w-[200px] bg-[#FC890D] text-white rounded-lg shadow-md hover:bg-[#fc890de9] transition-colors disabled:opacity-50"
+              className="px-6 py-3 w-[200px] bg-[#FC890D] text-white rounded-lg shadow-md hover:bg-[#FD9A2E] transition-colors disabled:opacity-50"
               style={{ fontFamily: 'Poppins, sans-serif', fontSize: 16 }}
               disabled={isSubmitting}
             >
@@ -470,7 +431,7 @@ const ReturnPage = () => {
       )}
 
       {/* All Returns Expandable Table */}
-      <div className="mt-12">
+     { mounted && <div className="mt-12">
         <h2 className="text-xl text-white font-bold mb-4" style={{ fontFamily: 'Poppins, sans-serif' }}>All Returns</h2>
         <Table
           columns={mainColumns}
@@ -492,7 +453,7 @@ const ReturnPage = () => {
           rowKey="id"
           scroll={{ x: 1000 }}
         />
-      </div>
+      </div> }
     </MainLayout>
   )
 }
