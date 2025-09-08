@@ -45,17 +45,36 @@ const ReturnPage = () => {
   const [editingIndex, setEditingIndex] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [allReturns, setAllReturns] = useState([])
-  // Search/filter states
+  // Search/filter and pagination states
   const [searchReturnNo, setSearchReturnNo] = useState('')
   const [searchCreatedAt, setSearchCreatedAt] = useState('')
   const [searchLoading, setSearchLoading] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(5)
+  const [totalReturns, setTotalReturns] = useState(0)
+  const [sortBy, setSortBy] = useState('createdAt')
+  const [sortDir, setSortDir] = useState('desc')
 
   // Fetch all items and returns
   useEffect(() => {
     fetchItems()
-    fetchAllReturns()
+    fetchFilteredReturns({ page: 1, size: pageSize, sortBy, sortDir })
     getCurrentReturnNumber()
+    // eslint-disable-next-line
   }, [])
+
+  // Re-fetch on pagination, sort change (not on search input change)
+  useEffect(() => {
+    fetchFilteredReturns({
+      page: currentPage,
+      size: pageSize,
+      sortBy,
+      sortDir,
+      ReturnNo: searchReturnNo,
+      CreatedAt: searchCreatedAt
+    })
+    // eslint-disable-next-line
+  }, [currentPage, pageSize, sortBy, sortDir])
 
   const fetchItems = async () => {
     try {
@@ -75,37 +94,59 @@ const ReturnPage = () => {
     }
   }
 
-  // Search API call
-  const fetchFilteredReturns = async (params = {}) => {
-    setSearchLoading(true)
+  // Paginated & searchable API call
+  const fetchFilteredReturns = async ({
+    page = 1,
+    size = 5,
+    sortBy: sortField = 'createdAt',
+    sortDir: sortDirection = 'desc',
+    ReturnNo = '',
+    CreatedAt = ''
+  } = {}) => {
+    setSearchLoading(true);
     try {
       const query = new URLSearchParams({
-        page: 0,
-        size: 50,
-        sortBy: 'createdAt',
-        sortDir: 'desc',
-        ...(params.ReturnNo ? { ReturnNo: params.ReturnNo } : {}),
-        ...(params.CreatedAt ? { CreatedAt: params.CreatedAt } : {})
-      }).toString()
-      const res = await axios.get(`http://localhost:8080/api/return/allby?${query}`)
-      setAllReturns(res.data.content || [])
+        page: page - 1,
+        size,
+        sortBy: sortField,
+        sortDir: sortDirection,
+        ...(ReturnNo ? { ReturnNo } : {}),
+        ...(CreatedAt ? { CreatedAt } : {})
+      }).toString();
+      const res = await axios.get(`http://localhost:8080/api/return/allby?${query}`);
+      const data = res.data;
+      setAllReturns(data.content || []);
+      setTotalReturns(data.totalElements || (data.content ? data.content.length : 0));
     } catch (err) {
-      customToast('error', 'Failed to search returns')
+      customToast('error', 'Failed to search returns');
+      setAllReturns([]);
+      setTotalReturns(0);
     }
-    setSearchLoading(false)
-  }
+    setSearchLoading(false);
+  };
 
   const handleSearch = () => {
+    setCurrentPage(1);
     fetchFilteredReturns({
+      page: 1,
+      size: pageSize,
+      sortBy,
+      sortDir,
       ReturnNo: searchReturnNo,
       CreatedAt: searchCreatedAt
-    })
+    });
   }
 
   const handleClearSearch = () => {
     setSearchReturnNo('')
     setSearchCreatedAt('')
-    fetchAllReturns()
+    setCurrentPage(1);
+    fetchFilteredReturns({
+      page: 1,
+      size: pageSize,
+      sortBy,
+      sortDir
+    });
   }
 
   // Generate next return order number
@@ -592,11 +633,22 @@ const ReturnPage = () => {
             defaultExpandedRowKeys: [],
             columnWidth: "100px",
           }}
-          pagination={{ 
-            pageSize: 10,
-            showSizeChanger: false,
+          pagination={{
+            current: currentPage,
+            pageSize: pageSize,
+            total: totalReturns,
+            showSizeChanger: true,
             showQuickJumper: true,
-            showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} items`
+            showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} items`,
+            pageSizeOptions: ['5', '10', '20', '50', '100'],
+            onChange: (page, size) => {
+              setCurrentPage(page);
+              setPageSize(size);
+            },
+            onShowSizeChange: (current, size) => {
+              setCurrentPage(1);
+              setPageSize(size);
+            }
           }}
           size="large"
           className="text-base"

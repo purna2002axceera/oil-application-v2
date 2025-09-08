@@ -164,7 +164,7 @@ const page = () => {
         url = 'http://localhost:8080/api/sales-order/allby';
         const params = new URLSearchParams({
           page: '1',
-          size: '1000', // Get more records for filtering
+          size: '5', // Get more records for filtering
           sortBy: 'id',
           sortDir: 'desc'
         });
