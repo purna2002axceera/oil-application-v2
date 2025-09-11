@@ -59,7 +59,14 @@ const page = () => {
     const [note, setNote] = useState('')
     const [salesItems, setSalesItems] = useState([])
     const [grandTotal, setGrandTotal] = useState(0)
-    const [allSales, setAllSales] = useState([])
+  const [allSales, setAllSales] = useState([])
+  const [salesLoading, setSalesLoading] = useState(false)
+  const [salesPage, setSalesPage] = useState(1)
+  const [salesPageSize, setSalesPageSize] = useState(10)
+  const [salesTotal, setSalesTotal] = useState(0)
+  const [searchOrderType, setSearchOrderType] = useState('')
+  const [searchOrderNo, setSearchOrderNo] = useState('')
+  const [searchCreatedAt, setSearchCreatedAt] = useState(null)
     const [editingKey, setEditingKey] = useState('');
     const [showCreateCustomer, setCreateCustomer] = useState(false)
     const [fixedOrderData, setFixedOrderData] = useState(false)
@@ -67,6 +74,8 @@ const page = () => {
     const [reportStartDate, setReportStartDate] = useState(null); // dayjs or null
     const [reportEndDate, setReportEndDate] = useState(null);     // dayjs or null
     const [reportLoading, setReportLoading] = useState(false);
+    const [customerCache, setCustomerCache] = useState({});
+
 
   const getCurrentSalesNumber = async () => {
     try {
@@ -142,61 +151,96 @@ const page = () => {
   };
 
   const fetchCustomerById = async (customerId) => {
-    try {
-      const response = await fetch(`http://localhost:8080/api/customer/${customerId}`);
-      const data = await response.json();
-      return data.customerName;
-    } catch (error) {
-      console.error('Error fetching customer:', error);
-      return `Customer ${customerId}`;
-    }
-  };
+  if (!customerId) return null;
+
+  // If cached, return directly
+  if (customerCache[customerId]) {
+    return customerCache[customerId];
+  }
+
+  // Mark as loading
+  setCustomerCache(prev => ({ ...prev, [customerId]: "loading..." }));
+
+  try {
+    const response = await fetch(`http://localhost:8080/api/customer/${customerId}`);
+    const data = await response.json();
+    const name = data.customerName || `Customer ${customerId}`;
+
+    // Save in cache
+    setCustomerCache(prev => ({ ...prev, [customerId]: name }));
+    return name;
+  } catch (error) {
+    console.error('Error fetching customer:', error);
+    setCustomerCache(prev => ({ ...prev, [customerId]: `Customer ${customerId}` }));
+    return `Customer ${customerId}`;
+  }
+};
+
+
 
   const getCustomerName = (customerId) => {
     const customer = customers.find(customer => customer.id === customerId)
     return customer ? customer.customerName : `Customer ${customerId}`
   }
 
-  const fetchAllSales = async () => {
-    try {
-      const response = await fetch('http://localhost:8080/api/sales-order');
-      const data = await response.json();
-      
-      // Fetch customer names for all sales
-      const salesWithCustomerNames = await Promise.all(
-        data.map(async (sale) => {
-          const formattedCreatedAt = sale.createdAt.split('T')[0]
-          let customerName = getCustomerName(sale.customerId);
-          
-          // If customer not found in local data, fetch from API
-          if (customerName === `Customer ${sale.customerId}`) {
-            customerName = await fetchCustomerById(sale.customerId);
-          }
-          
-          return {
-            ...sale,
-            createdAt: formattedCreatedAt,
-            key: sale.id.toString(),
-            salesNumber: sale.salesOrderNo,
-            customerName: customerName,
-            items: sale.items.map((item, index) => ({
-              ...item,
-              key: `${sale.id}-${item.id || index}`,
-              itemName: getItemName(item.itemId) || `Item ${item.itemId}`,
-              unitPrice: item.soItemUnitPrice,
-              totalPrice: item.soItemTotalAmount,
-              totalAmount: item.soItemTotalAmount
-            }))
-          }
-        })
-      );
-      console.log('Sales with customer names:', salesWithCustomerNames)
-      setAllSales(salesWithCustomerNames);
-      console.log('All Sales:', data)
-    } catch (error) {
-      console.error('Error fetching Sales:', error);
-    }
-  };
+  // Fetch sales with search and pagination
+  const fetchAllSales = async (params = {}) => {
+  setSalesLoading(true);
+  try {
+    const {
+      page = salesPage,
+      size = salesPageSize,
+      SalesOrderType = searchOrderType,
+      SalesOrderNo = searchOrderNo,
+      CreatedAt = searchCreatedAt ? searchCreatedAt.format('YYYY-MM-DD') : '',
+    } = params;
+
+    const response = await fetch(
+      `http://localhost:8080/api/sales-order/allby?page=${page-1}&size=${size}` +
+      `&sortBy=createdAt&sortDir=desc` +
+      `&SalesOrderType=${encodeURIComponent(SalesOrderType)}` +
+      `&SalesOrderNo=${encodeURIComponent(SalesOrderNo)}` +
+      `&CreatedAt=${encodeURIComponent(CreatedAt)}`
+    );
+    const data = await response.json();
+
+    const salesList = await Promise.all(
+      (data.content || data).map(async (sale) => {
+        const formattedCreatedAt = sale.createdAt?.split('T')[0] || '';
+
+        // Fetch customerName (either from state or API)
+        let customerName = '-';
+        if (sale.salesOrderType !== 'CASH' && sale.customerId) {
+          customerName = await fetchCustomerById(sale.customerId);
+        }
+
+        return {
+          ...sale,
+          createdAt: formattedCreatedAt,
+          key: sale.id?.toString() || Math.random().toString(),
+          salesNumber: sale.salesOrderNo,
+          customerName,
+          items: (sale.items || []).map((item, index) => ({
+            ...item,
+            key: `${sale.id}-${item.id || index}`,
+            itemName: getItemName(item.itemId) || `Item ${item.itemId}`,
+            unitPrice: item.soItemUnitPrice,
+            totalPrice: item.soItemTotalAmount,
+            totalAmount: item.soItemTotalAmount,
+          })),
+        };
+      })
+    );
+
+    setAllSales(salesList);
+    setSalesTotal(data.totalElements || salesList.length);
+  } catch (error) {
+    console.error('Error fetching Sales:', error);
+  } finally {
+    setSalesLoading(false);
+  }
+};
+
 
   // Reset the two date pickers
 const clearReportDates = () => {
@@ -266,11 +310,16 @@ const generateSalesReport = async () => {
 };
 
   useEffect(() => {
-    getCurrentSalesNumber()
-    fetchItems()
-    fetchAllSales()
-    fetchCustomers()
-  }, [])
+    getCurrentSalesNumber();
+    fetchItems();
+    fetchCustomers();
+  }, []);
+
+  // Fetch sales when search or pagination changes
+  useEffect(() => {
+    fetchAllSales();
+    // eslint-disable-next-line
+  }, [salesPage, salesPageSize, searchOrderType, searchOrderNo, searchCreatedAt]);
 
   useEffect(() => {
     autoCalculateTotalPrice()
@@ -397,6 +446,8 @@ const generateSalesReport = async () => {
     customToast('success', 'Item added successfully')
     resetForAddItem()
   }
+
+  
 
   const handleRemoveItem = (index) => {
     const updatedItems = salesItems.filter((_, i) => i !== index)
@@ -604,11 +655,20 @@ const generateSalesReport = async () => {
     }
 ,    
     {
-      title: 'Customer',
-      dataIndex: 'customerName',
-      key: 'customerName',
-      width: '15%',
-    },
+  title: 'Customer Name',
+  dataIndex: 'customerName',
+  key: 'customerName',
+  render: (text, record) => {
+    if (record.salesOrderType === "CASH") {
+      return <span>-</span>;
+    }
+    if (text === "loading...") {
+      return <span style={{ color: "#999" }}>Fetching...</span>; // 👈 shows temporary text
+    }
+    return <span>{text}</span>;
+  },
+},
+
     {
       title: 'Count',
       key: 'itemsCount',
@@ -924,6 +984,7 @@ const generateSalesReport = async () => {
  }
 
 {/* Items Table */}
+{/* Items Table */}
 {salesItems.length > 0 && (
   <div className="mt-8">
     <h2 className="text-xl font-semibold mb-4 text-white">Added Items</h2>
@@ -945,12 +1006,25 @@ const generateSalesReport = async () => {
           {salesItems.map((item, index) => (
             <tr key={index} className="hover:bg-gray-50">
               <td className="px-4 py-3 text-sm text-gray-900">{item.itemName}</td>
-              <td className="px-4 py-3 text-sm text-gray-900">{item.customer_name}</td>
-              <td className="px-4 py-3 text-sm text-gray-900 text-center">{item.quantity}</td>
-              <td className="px-4 py-3 text-sm text-gray-900 text-center">{item.quantityMilliliters}</td>
-              <td className="px-4 py-3 text-sm text-gray-900 text-center">{item.quantityLiters}</td>
-              <td className="px-4 py-3 text-sm text-gray-900 text-right">{item.unitPrice.toFixed(2)}</td>
-              <td className="px-4 py-3 text-sm text-gray-900 text-right">{item.totalPrice.toFixed(2)}</td>
+              <td className="px-4 py-3 text-sm text-gray-900">
+                {/* Display customer name directly from the item object */}
+                {orderType === 'CASH' ? 'CASH' : (item.customer_name || '-')}
+              </td>
+              <td className="px-4 py-3 text-sm text-gray-900 text-center">
+                {item.quantity || 'N/A'}
+              </td>
+              <td className="px-4 py-3 text-sm text-gray-900 text-center">
+                {item.quantityMilliliters ? item.quantityMilliliters.toLocaleString() : 'N/A'}
+              </td>
+              <td className="px-4 py-3 text-sm text-gray-900 text-center">
+                {item.quantityLiters ? item.quantityLiters.toFixed(3) : 'N/A'}
+              </td>
+              <td className="px-4 py-3 text-sm text-gray-900 text-right">
+                {item.unitPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </td>
+              <td className="px-4 py-3 text-sm text-gray-900 text-right">
+                {item.totalPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </td>
               <td className="px-4 py-3 text-sm text-gray-900 text-center">
                 <div className="flex justify-center gap-2">
                   <button
@@ -974,8 +1048,10 @@ const generateSalesReport = async () => {
         </tbody>
         <tfoot className="bg-gray-50">
           <tr>
-            <td colSpan="4" className="px-4 py-3 text-right font-semibold text-gray-900">Grand Total:</td>
-            <td className="px-4 py-3 text-right font-bold text-gray-900">{grandTotal.toFixed(2)}</td>
+            <td colSpan="6" className="px-4 py-3 text-right font-semibold text-gray-900">Grand Total:</td>
+            <td className="px-4 py-3 text-right font-bold text-gray-900">
+              {grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </td>
             <td></td>
           </tr>
         </tfoot>
@@ -1003,22 +1079,92 @@ const generateSalesReport = async () => {
 </div> }
 
 {/* All Sales Expandable Table */}
-{ mounted && <div className="mt-12">
-  <h2 className="text-xl font-bold mb-4 text-white">All Sales</h2>
-  <Table 
-    columns={mainColumns}
-    dataSource={allSales}
-    expandable={{
-      expandedRowRender,
-      defaultExpandedRowKeys: [],
-      columnWidth: "100px",
-    }}
-    pagination={{ pageSize: 10 }}
-    size="large"
-    className="text-base"
-    bordered
-  />
-</div> }
+{ mounted && (
+  <div className="mt-12 mb-6">
+    <div className="bg-white p-6 rounded-lg shadow-md">
+      <h3 className="text-lg font-semibold mb-4">Filter Sales Orders</h3>
+      <div className="flex flex-wrap gap-4 items-end">
+        <div className="flex flex-col">
+          <label className="mb-2 text-sm font-medium text-gray-700">Search by Order No</label>
+          <Input.Search
+            placeholder="Enter Order No"
+            value={searchOrderNo}
+            onChange={e => setSearchOrderNo(e.target.value)}
+            onSearch={() => { setSalesPage(1); fetchAllSales({ page: 1 }); }}
+            style={{ width: 220 }}
+            allowClear
+          />
+        </div>
+        <div className="flex flex-col">
+          <label className="mb-2 text-sm font-medium text-gray-700">Order Type</label>
+          <Select
+            placeholder="Select Type"
+            value={searchOrderType || undefined}
+            onChange={v => { setSearchOrderType(v); setSalesPage(1); }}
+            style={{ width: 160 }}
+            allowClear
+          >
+            <Option value="CASH">CASH</Option>
+            <Option value="CREDIT">CREDIT</Option>
+          </Select>
+        </div>
+        <div className="flex flex-col">
+          <label className="mb-2 text-sm font-medium text-gray-700">Created At</label>
+          <DatePicker
+            value={searchCreatedAt}
+            onChange={date => { setSearchCreatedAt(date); setSalesPage(1); }}
+            format="YYYY-MM-DD"
+            style={{ width: 180 }}
+            allowClear
+          />
+        </div>
+        <Button onClick={() => { setSearchOrderNo(''); setSearchOrderType(''); setSearchCreatedAt(''); setSalesPage(1); }} style={{ height: 32 }}>
+          Clear
+        </Button>
+      </div>
+      <div className="mt-4 text-sm text-gray-600">
+        {(searchOrderNo || searchOrderType || searchCreatedAt) ? (
+          <p>
+            Showing {allSales.length} result{allSales.length !== 1 ? 's' : ''}
+            {searchOrderNo && <> for Order No "{searchOrderNo}"</>}
+            {searchOrderType && <> of type "{searchOrderType}"</>}
+            {searchCreatedAt && <> created at "{searchCreatedAt ? searchCreatedAt.format('YYYY-MM-DD') : ''}"</>}
+          </p>
+        ) : (
+          <p>Showing all {salesTotal} sales orders</p>
+        )}
+      </div>
+    </div>
+    <div className="mt-8">
+      <h2 className="text-xl font-bold mb-4 text-white">All Sales</h2>
+      <Table 
+        columns={mainColumns}
+        dataSource={allSales}
+        loading={salesLoading}
+        expandable={{
+          expandedRowRender,
+          defaultExpandedRowKeys: [],
+          columnWidth: "100px",
+        }}
+        pagination={{
+          current: salesPage,
+          pageSize: salesPageSize,
+          total: salesTotal,
+          showSizeChanger: true,
+          onChange: (page, pageSize) => {
+            setSalesPage(page);
+            setSalesPageSize(pageSize);
+          },
+          showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} items`,
+        }}
+        size="large"
+        className="text-base"
+        bordered
+        rowKey="key"
+      />
+    </div>
+  </div>
+) }
 
     </MainLayout>
 

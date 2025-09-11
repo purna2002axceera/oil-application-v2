@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Table, Button, Popconfirm, InputNumber, Select, Spin, Flex } from 'antd';
 import { EditOutlined, DeleteOutlined, LoadingOutlined } from '@ant-design/icons';
+import { Input } from 'antd';
+import { SearchOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import CreateBrand from '../components/CreateBrand';
 import MainLayout from '../layouts/MainLayout';
@@ -25,6 +27,7 @@ export default function ItemMaster() {
   const [editingItem, setEditingItem] = useState(null);
   const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [searchText, setSearchText] = useState('');
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -35,71 +38,50 @@ export default function ItemMaster() {
   const [sortBy, setSortBy] = useState('id');
   const [sortDir, setSortDir] = useState('DESC');
 
-  // Memoized fetch function to prevent unnecessary re-renders
+  // Memoized fetch function to support search only
   const fetchItems = useCallback(async (
   page = currentPage || 1,
   size = pageSize || 6,
   sortField = sortBy || 'id',
-  sortDirection = sortDir || 'DESC'
+  sortDirection = sortDir || 'DESC',
+  search = searchText
 ) => {
   try {
     setLoading(true);
-    // Ensure all params are numbers/strings, not undefined
-    const safePage = page || 1;
-    const safeSize = size || 6;
-    const safeSortField = sortField || 'id';
-    const safeSortDirection = sortDirection || 'DESC';
-
-    const response = await fetch(
-      `http://localhost:8080/api/item/paginated?page=${safePage}&size=${safeSize}&sortBy=${safeSortField}&sortDir=${safeSortDirection}`,
-      {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Response error:', errorText);
-        throw new Error(`HTTP ${response.status}: ${errorText || 'Failed to fetch items'}`);
-      }
-      
-      const data = await response.json();
-      
-      // Handle different response structures
-      if (data && typeof data === 'object') {
-        const content = data.content || data.data || data || [];
-        const pageNumber = data.pageNumber || data.page || page;
-        const pageSize = data.pageSize || data.size || size;
-        const totalElements = data.totalElements || data.total || content.length;
-        
-        // Force re-render by creating new array reference
-        setItems(Array.isArray(content) ? [...content] : []);
-        setCurrentPage(pageNumber);
-        setPageSize(pageSize);
-        setTotalItems(totalElements);
-        
-        // Update sorting state if different
-        if (sortField !== sortBy) setSortBy(sortField);
-        if (sortDirection !== sortDir) setSortDir(sortDirection);
-        
-        console.log('Items updated:', content.length);
-      } else {
-        console.warn('Unexpected response format:', data);
-        setItems([]);
-      }
-      
-    } catch (error) {
-      console.error('Error fetching items:', error);
-      customToast('error', `Failed to fetch items: ${error.message}`);
-      setItems([]);
-      setTotalItems(0);
-    } finally {
-      setLoading(false);
+    let url = '';
+    if (search) {
+      url = `http://localhost:8080/api/item/Search-Material-Code?MaterialCode=${encodeURIComponent(search)}&page=${page}&size=${size}&sortBy=${sortField}&sortDir=${sortDirection}`;
+    } else {
+      url = `http://localhost:8080/api/item/paginated?page=${page}&size=${size}&sortBy=${sortField}&sortDir=${sortDirection}`;
     }
-  }, []);
+    const response = await fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText || 'Failed to fetch items'}`);
+    }
+    const data = await response.json();
+    if (data && typeof data === 'object') {
+      const content = data.content || data.data || data || [];
+      const pageNumber = data.pageNumber || data.page || page;
+      const pageSize = data.pageSize || data.size || size;
+      const totalElements = data.totalElements || data.total || content.length;
+      setItems(Array.isArray(content) ? [...content] : []);
+      setCurrentPage(pageNumber);
+      setPageSize(pageSize);
+      setTotalItems(totalElements);
+      if (sortField !== sortBy) setSortBy(sortField);
+      if (sortDirection !== sortDir) setSortDir(sortDirection);
+    } else {
+      setItems([]);
+    }
+  } catch (error) {
+    customToast('error', `Failed to fetch items: ${error.message}`);
+    setItems([]);
+    setTotalItems(0);
+  } finally {
+    setLoading(false);
+  }
+}, [currentPage, pageSize, sortBy, sortDir, searchText]);
 
   useEffect(() => {
     setMounted(true);
@@ -138,7 +120,7 @@ export default function ItemMaster() {
   useEffect(() => {
     console.log('Component mounted, fetching initial data...');
     fetchBrands();
-    fetchItems(1, 6, 'id', 'DESC'); // Explicit initial values
+    fetchItems(1, 6, 'id', 'DESC', ''); // Explicit initial values
   }, []); // Remove dependencies to prevent infinite loops
 
   useEffect(() => {
@@ -155,21 +137,17 @@ export default function ItemMaster() {
   const handleTableChange = (pagination, filters, sorter) => {
     const newPage = pagination.current;
     const newSize = pagination.pageSize;
-    
     let newSortBy = sortBy;
     let newSortDir = sortDir;
-    
     if (sorter && sorter.field) {
       newSortBy = sorter.field;
       newSortDir = sorter.order === 'ascend' ? 'ASC' : 'DESC';
     }
-
     setCurrentPage(newPage);
     setPageSize(newSize);
     setSortBy(newSortBy);
     setSortDir(newSortDir);
-
-    fetchItems(newPage, newSize, newSortBy, newSortDir);
+    fetchItems(newPage, newSize, newSortBy, newSortDir, searchText);
   };
 
   const handleEdit = (record) => {
@@ -210,7 +188,7 @@ export default function ItemMaster() {
       
       // Refresh the table data with a small delay to ensure backend is updated
       setTimeout(() => {
-        fetchItems(targetPage, pageSize, sortBy, sortDir);
+        fetchItems(targetPage, pageSize, sortBy, sortDir, searchText);
       }, 100);
       
     } catch (error) {
@@ -273,7 +251,7 @@ export default function ItemMaster() {
       
       // Refresh the table data with a small delay
       setTimeout(() => {
-        fetchItems(currentPage, pageSize, sortBy, sortDir);
+        fetchItems(currentPage, pageSize, sortBy, sortDir, searchText);
       }, 100);
       
     } catch (error) {
@@ -611,6 +589,38 @@ export default function ItemMaster() {
         </div>
       </div> }
 
+    { mounted && (
+      <div className="mt-12 mb-6">
+        <div className="bg-white p-6 rounded-lg shadow-md">
+          <h3 className="text-lg font-semibold mb-4">Filter Items</h3>
+          <div className="flex flex-wrap gap-4 items-end">
+            <div className="flex flex-col">
+              <label className="mb-2 text-sm font-medium text-gray-700">Search by Material Code</label>
+              <Input.Search
+                placeholder="Enter Material Code"
+                value={searchText}
+                onChange={e => setSearchText(e.target.value)}
+                onSearch={() => { setCurrentPage(1); fetchItems(1, pageSize, sortBy, sortDir, searchText); }}
+                style={{ width: 300 }}
+                prefix={<SearchOutlined />}
+                allowClear
+              />
+            </div>
+            <Button onClick={() => { setSearchText(''); setCurrentPage(1); fetchItems(1, pageSize, sortBy, sortDir, ''); }} style={{ height: 32 }}>
+              Clear
+            </Button>
+          </div>
+          <div className="mt-4 text-sm text-gray-600">
+            {searchText ? (
+              <p>matching "{searchText}"</p>
+            ) : (
+              <p>Showing all {totalItems} items</p>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
+
     { mounted && <div className="mt-8">
         <h2 className="text-xl text-white font-bold mb-4">Items List</h2>
         <Table
@@ -620,8 +630,22 @@ export default function ItemMaster() {
           loading={loading}
           pagination={{
             current: currentPage,
-            pageSize: pageSize,     
+            pageSize: pageSize,
             total: totalItems,
+            showSizeChanger: true,
+            showQuickJumper: true,
+            showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} items`,
+            pageSizeOptions: ['5', '10', '20', '50', '100'],
+            onChange: (page, size) => {
+              setCurrentPage(page);
+              setPageSize(size);
+              fetchItems(page, size, sortBy, sortDir, searchText);
+            },
+            onShowSizeChange: (current, size) => {
+              setCurrentPage(1);
+              setPageSize(size);
+              fetchItems(1, size, sortBy, sortDir, searchText);
+            }
           }}
           onChange={handleTableChange}
           size="large"

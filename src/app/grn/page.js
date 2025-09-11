@@ -6,6 +6,7 @@ import axios from 'axios'
 import { DeleteOutlined, EditOutlined, SearchOutlined, CalendarOutlined } from '@ant-design/icons'
 import { customToast } from '../utils/toast'
 import { Table, Button, Form, Input, InputNumber, DatePicker, Select, Modal } from 'antd'
+import moment from 'moment'
 
 const EditableCell = ({
   editing,
@@ -64,12 +65,15 @@ const page = () => {
     const [editGrnItems, setEditGrnItems] = useState([])
     const [editGrandTotal, setEditGrandTotal] = useState(0)
 
-    // Updated state for filters and pagination with single date
+    // Updated state for filters and pagination
     const [filteredGrns, setFilteredGrns] = useState([])
-    const [searchText, setSearchText] = useState('')
+    const [searchGrnNumber, setSearchGrnNumber] = useState('')
+    const [searchInvoiceNumber, setSearchInvoiceNumber] = useState('')
     const [selectedDate, setSelectedDate] = useState(null)
     const [currentPage, setCurrentPage] = useState(1)
     const [pageSize, setPageSize] = useState(10)
+    const [totalElements, setTotalElements] = useState(0)
+    const [loading, setLoading] = useState(false)
 
   const getCurrentGrnNumber = async () => {
     try {
@@ -120,60 +124,15 @@ const page = () => {
 
   useEffect(() => {
     setMounted(true);
+    getCurrentGrnNumber();
+    fetchItems();
   }, []);
 
-  const fetchAllGrns = async () => {
-    try {
-      const response = await fetch('http://localhost:8080/api/grn');
-      const data = await response.json();
-      const grnData = data.map(grn => {
-        const formattedCreatedAt = grn.createdAt.split('T')[0]
-        return {
-          ...grn,
-          createdAt: formattedCreatedAt,
-          key: grn.id.toString(),
-          items: grn.items.map((item, index) => ({
-            ...item,
-            key: `${grn.id}-${item.id || index}`,
-            itemName: getItemName(item.itemId) || `Item ${item.itemId}`
-          }))
-        }
-      })
-      setAllGrns(grnData);
-    } catch (error) {
-      console.error('Error fetching GRNs:', error);
-    }
-  };
-
-  const applyFilters = () => {
-    let filtered = [...allGrns]
-
-    if (searchText.trim()) {
-      filtered = filtered.filter(grn => 
-        grn.grnNumber.toLowerCase().includes(searchText.toLowerCase()) ||
-        grn.invoiceNumber.toLowerCase().includes(searchText.toLowerCase())
-      )
-    }
-
-    if (selectedDate) {
-      filtered = filtered.filter(grn => {
-        const grnDate = new Date(grn.createdAt)
-        const filterDate = selectedDate.startOf('day')
-        const grnDateFormatted = grnDate.toISOString().split('T')[0]
-        const filterDateFormatted = filterDate.format('YYYY-MM-DD')
-        return grnDateFormatted === filterDateFormatted
-      })
-    }
-
-    setFilteredGrns(filtered)
-    setCurrentPage(1)
-  }
-
   useEffect(() => {
-    getCurrentGrnNumber()
-    fetchItems()
-    fetchAllGrns()
-  }, [])
+    if (mounted) {
+      fetchAllGrns(1, pageSize);
+    }
+  }, [mounted]);
 
   useEffect(() => {
     autoCalculateTotalPrice()
@@ -187,14 +146,102 @@ const page = () => {
     calculateEditGrandTotal()
   }, [editGrnItems])
 
-  useEffect(() => {
-    applyFilters()
-  }, [searchText, selectedDate, allGrns])
+  // Fetch paginated GRNs (default, no search)
+  const fetchAllGrns = async (pageNum = 1, pageSz = 10, sortBy = 'createdAt', sortDir = 'desc') => {
+    setLoading(true);
+    try {
+      const response = await fetch(`http://localhost:8080/api/grn/paginated?page=${pageNum-1}&size=${pageSz}&sortBy=${sortBy}&sortDir=${sortDir}`);
+      const data = await response.json();
+      
+      const grnData = (data.content || []).map(grn => {
+        const formattedCreatedAt = grn.createdAt.split('T')[0]
+        return {
+          ...grn,
+          createdAt: formattedCreatedAt,
+          key: grn.id.toString(),
+          items: grn.items.map((item, index) => ({
+            ...item,
+            key: `${grn.id}-${item.id || index}`,
+            itemName: getItemName(item.itemId) || `Item ${item.itemId}`
+          }))
+        }
+      })
+      
+      setAllGrns(grnData);
+      setFilteredGrns(grnData);
+      setTotalElements(data.totalElements || 0);
+      setCurrentPage(pageNum);
+    } catch (error) {
+      console.error('Error fetching GRNs:', error);
+      customToast('error', 'Error fetching purchase orders');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Search API for filters
+  const applyFilters = async (pageNum = 1, pageSz = pageSize, sortBy = 'createdAt', sortDir = 'desc') => {
+    // If no search criteria, fetch all GRNs
+    if (!searchGrnNumber && !searchInvoiceNumber && !selectedDate) {
+      fetchAllGrns(pageNum, pageSz, sortBy, sortDir);
+      return;
+    }
+
+    setLoading(true);
+    let url = `http://localhost:8080/api/grn/search?`;
+    
+    // Add search parameters
+    if (searchGrnNumber) {
+      url += `grnNumber=${encodeURIComponent(searchGrnNumber)}&`;
+    }
+    if (searchInvoiceNumber) {
+      url += `invoiceNumber=${encodeURIComponent(searchInvoiceNumber)}&`;
+    }
+    
+    // Add pagination and sorting parameters
+    url += `page=${pageNum-1}&size=${pageSz}&sortBy=${sortBy}&sortDir=${sortDir}`;
+    
+    try {
+      const response = await fetch(url);
+      const data = await response.json();
+      
+      let grnData = (data.content || []).map(grn => {
+        const formattedCreatedAt = grn.createdAt.split('T')[0]
+        return {
+          ...grn,
+          createdAt: formattedCreatedAt,
+          key: grn.id.toString(),
+          items: grn.items.map((item, index) => ({
+            ...item,
+            key: `${grn.id}-${item.id || index}`,
+            itemName: getItemName(item.itemId) || `Item ${item.itemId}`
+          }))
+        }
+      });
+
+      // Apply date filter on frontend if selectedDate is provided
+      if (selectedDate) {
+        const selectedDateStr = selectedDate.format('YYYY-MM-DD');
+        grnData = grnData.filter(grn => grn.createdAt === selectedDateStr);
+      }
+
+      setFilteredGrns(grnData);
+      setTotalElements(selectedDate ? grnData.length : (data.totalElements || 0));
+      setCurrentPage(pageNum);
+    } catch (error) {
+      console.error('Error searching GRNs:', error);
+      customToast('error', 'Error searching purchase orders');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   const handleSelectItem = (val) =>{
     setSelectedItem(val)
     const selectedItem = items.find(item=>item.id === val)
-    setItemUnitPrice(selectedItem.wholesalePrice)
+    if (selectedItem) {
+      setItemUnitPrice(selectedItem.wholesalePrice)
+    }
   }
 
   const autoCalculateTotalPrice = () => {
@@ -316,7 +363,8 @@ const page = () => {
       const response = await axios.post('http://localhost:8080/api/grn', grnData)
       customToast('success', 'GRN created successfully')
       resetAll()
-      fetchAllGrns()
+      // Refresh the list with current page and filters
+      applyFilters(currentPage, pageSize)
     } catch (error) {
       customToast('error', `Error creating GRN: ${error.message}`)
     }
@@ -327,7 +375,8 @@ const page = () => {
         console.log("delete grn",grnId)
       const response = await axios.delete(`http://localhost:8080/api/grn/${grnId}`)
       customToast('success', 'GRN deleted successfully')
-      fetchAllGrns()
+      // Refresh current page
+      applyFilters(currentPage, pageSize)
     } catch (error) {
       customToast('error', `Error deleting GRN: ${error.message}`)
     }
@@ -442,30 +491,57 @@ const page = () => {
       setEditGrnItems([])
       setEditGrandTotal(0)
       editForm.resetFields()
-      fetchAllGrns()
+      // Refresh current page
+      applyFilters(currentPage, pageSize)
     } catch (error) {
       customToast('error', `Error updating GRN: ${error.message}`)
     }
   }
 
-  const handleSearch = (value) => {
-    setSearchText(value)
-  }
-
   const handleDateChange = (date) => {
     setSelectedDate(date)
+    setCurrentPage(1) // Reset to first page when date changes
+    // Apply filters automatically after a short delay
+    setTimeout(() => applyFilters(1, pageSize), 100)
   }
 
   const clearFilters = () => {
-    setSearchText('')
-    setSelectedDate(null)
-    setCurrentPage(1)
+    setSearchGrnNumber('');
+    setSearchInvoiceNumber('');
+    setSelectedDate(null);
+    setCurrentPage(1);
+    fetchAllGrns(1, pageSize);
   }
 
-  const handleTableChange = (pagination) => {
-    setCurrentPage(pagination.current)
-    setPageSize(pagination.pageSize)
+  const handleTableChange = (pagination, filters, sorter) => {
+    const { current, pageSize: newPageSize } = pagination;
+    
+    // Determine sort parameters
+    const sortBy = sorter.field || 'createdAt';
+    const sortDir = sorter.order === 'ascend' ? 'asc' : 'desc';
+    
+    setCurrentPage(current)
+    setPageSize(newPageSize)
+    applyFilters(current, newPageSize, sortBy, sortDir);
   }
+
+  // Real-time search handler (no debounce here)
+  const handleSearchChange = (type, value) => {
+    if (type === 'grnNumber') {
+      setSearchGrnNumber(value);
+    } else if (type === 'invoiceNumber') {
+      setSearchInvoiceNumber(value);
+    }
+    setCurrentPage(1); // Reset to first page when searching
+  }
+
+  // Debounce search using useEffect
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      applyFilters(1, pageSize);
+    }, 400); // 400ms debounce
+    return () => clearTimeout(handler);
+  }, [searchGrnNumber, searchInvoiceNumber, selectedDate, pageSize]);
 
   // Editable functions for nested table
   const isEditing = (record) => record.key === editingKey;
@@ -473,8 +549,8 @@ const page = () => {
   const nestedColumns = [
     {
       title: 'Item Code',
-      dataIndex: 'itemCode',
-      key: 'itemCode',
+      dataIndex: 'itemName',
+      key: 'itemName',
       editable: true,
     },
     {
@@ -485,8 +561,8 @@ const page = () => {
     },
     {
       title: 'Supplier Name',
-      dataIndex: 'supplierName',
-      key: 'supplierName',
+      dataIndex: 'supplier_name',
+      key: 'supplier_name',
       editable: true,
     },
     {
@@ -498,8 +574,8 @@ const page = () => {
     },
     {
       title: 'Total Amount',
-      dataIndex: 'totalAmount',
-      key: 'totalAmount',
+      dataIndex: 'totalPrice',
+      key: 'totalPrice',
       render: (value) => value ? value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "-",
       editable: true,
     }
@@ -513,7 +589,7 @@ const page = () => {
       ...col,
       onCell: (record) => ({
         record,
-        inputType: ['quantity', 'unitPrice', 'totalAmount'].includes(col.dataIndex) ? 'number' : 'text',
+        inputType: ['quantity', 'unitPrice', 'totalPrice'].includes(col.dataIndex) ? 'number' : 'text',
         dataIndex: col.dataIndex,
         title: col.title,
         editing: isEditing(record),
@@ -521,25 +597,28 @@ const page = () => {
     };
   });
 
-  // Main table columns
+  // Main table columns with sorting
   const mainColumns = [
     {
       title: 'Purchase Number',
       dataIndex: 'grnNumber',
       key: 'grnNumber',
       width: '20%',
+      sorter: true,
     },
     {
       title: 'Invoice Number',
       dataIndex: 'invoiceNumber',
       key: 'invoiceNumber',
       width: '20%',
+      sorter: true,
     },
     {
       title: 'Created At',
       dataIndex: 'createdAt',
       key: 'createdAt',
       width: '20%',
+      sorter: true,
     },
     {
       title: 'Total Amount',
@@ -547,6 +626,7 @@ const page = () => {
       key: 'totalAmount',
       width: '20%',
       render: (value) => value ? value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "-",
+      sorter: true,
     },
     {
       title: 'Items Count',
@@ -554,28 +634,6 @@ const page = () => {
       width: '20%',
       render: (_, record) => record.items?.length || 0,
     },
-    // {
-    //   title: 'Action',
-    //   key: 'action',
-    //   width: '25%',
-    //   render: (_, record) => (
-    //     <div className="flex gap-2">
-    //       {/* <Button 
-    //         type="primary" 
-    //         icon={<EditOutlined />} 
-    //         onClick={() => handleEditGrn(record)}
-    //         size="small"
-    //       /> */}
-    //       <Button 
-    //         type="primary" 
-    //         danger
-    //         icon={<DeleteOutlined />} 
-    //         onClick={() => handleDeleteGrn(record.id)}
-    //         size="small"
-    //       />
-    //     </div>
-    //   ),
-    // }
   ];
 
   const expandedRowRender = (record) => (
@@ -992,16 +1050,27 @@ const page = () => {
   <div className="bg-white p-6 rounded-lg shadow-md">
     <h3 className="text-lg font-semibold mb-4">Filter Purchase Orders</h3>
     <div className="flex flex-wrap gap-4 items-end">
-      {/* Search by GRN Number or Invoice Number */}
+
+      {/* Search by GRN Number */}
       <div className="flex flex-col">
-        <label className="mb-2 text-sm font-medium text-gray-700">Search by GRN/Invoice Number</label>
-        <Input.Search
-          placeholder="Enter GRN or Invoice Number"
-          value={searchText}
-          onChange={(e) => setSearchText(e.target.value)}
-          onSearch={handleSearch}
-          style={{ width: 300 }}
-          prefix={<SearchOutlined />}
+        <label className="mb-2 text-sm font-medium text-gray-700">GRN Number</label>
+        <Input
+          placeholder="Enter GRN Number"
+          value={searchGrnNumber}
+          onChange={e => handleSearchChange('grnNumber', e.target.value)}
+          style={{ width: 180 }}
+          allowClear
+        />
+      </div>
+
+      {/* Search by Invoice Number */}
+      <div className="flex flex-col">
+        <label className="mb-2 text-sm font-medium text-gray-700">Invoice Number</label>
+        <Input
+          placeholder="Enter Invoice Number"
+          value={searchInvoiceNumber}
+          onChange={e => handleSearchChange('invoiceNumber', e.target.value)}
+          style={{ width: 180 }}
           allowClear
         />
       </div>
@@ -1030,13 +1099,15 @@ const page = () => {
 
     {/* Updated Filter Results Summary */}
     <div className="mt-4 text-sm text-gray-600">
-      {searchText || selectedDate ? (
+      {(searchGrnNumber || searchInvoiceNumber || selectedDate) ? (
         <p>
-          {searchText && ` matching "${searchText}"`}
+          {searchGrnNumber && `GRN Number matching "${searchGrnNumber}"`}
+          {searchInvoiceNumber && ` Invoice Number matching "${searchInvoiceNumber}"`}
           {selectedDate && ` created on ${selectedDate.format('YYYY-MM-DD')}`}
+          {` - Showing ${filteredGrns.length} results`}
         </p>
       ) : (
-        <p>Showing all {allGrns.length} SOs</p>
+        <p>Showing all purchase orders ({totalElements} total)</p>
       )}
     </div>
   </div>
@@ -1048,6 +1119,7 @@ const page = () => {
   <Table 
     columns={mainColumns}
     dataSource={filteredGrns}
+    loading={loading}
     expandable={{
       expandedRowRender,
       defaultExpandedRowKeys: [],
@@ -1056,7 +1128,12 @@ const page = () => {
     pagination={{
       current: currentPage,
       pageSize: pageSize,
-      total: filteredGrns.length,
+      total: totalElements,
+      showSizeChanger: true,
+      showQuickJumper: true,
+      showTotal: (total, range) => 
+        `${range[0]}-${range[1]} of ${total} items`,
+      pageSizeOptions: ['5', '10', '20', '50', '100'],
       onChange: (page, size) => {
         setCurrentPage(page)
         setPageSize(size)
@@ -1077,4 +1154,3 @@ const page = () => {
 }
 
 export default page
-
