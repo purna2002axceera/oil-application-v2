@@ -4,7 +4,8 @@ import React, { useEffect, useState } from 'react'
 import MainLayout from '../layouts/MainLayout'
 import axios from 'axios'
 import { customToast } from '../utils/toast'
-import { Table, Button, InputNumber, Select, Popconfirm } from 'antd'
+import { Table, Button, InputNumber, Select, Popconfirm, Input } from 'antd'
+import { SearchOutlined } from '@ant-design/icons'
 
 
 const ReturnPage = () => {
@@ -19,14 +20,29 @@ const ReturnPage = () => {
   const [editingIndex, setEditingIndex] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [allReturns, setAllReturns] = useState([])
+  const [totalReturns, setTotalReturns] = useState(0)
+  const [page, setPage] = useState(1)
+  const [size, setSize] = useState(10)
+  const [sortBy, setSortBy] = useState('createdAt')
+  const [sortDir, setSortDir] = useState('desc')
+  const [searchReturnNo, setSearchReturnNo] = useState('')
+  const [searchCreatedAt, setSearchCreatedAt] = useState('')
+  const [searchLoading, setSearchLoading] = useState(false)
   const [mounted, setMounted] = useState(false);
+
 
   // Fetch all items and returns
   useEffect(() => {
     fetchItems()
-    fetchAllReturns()
+    fetchPaginatedReturns()
     getCurrentReturnNumber()
   }, [])
+
+  // Refetch returns when page, size, sort, or search changes
+  useEffect(() => {
+    if (mounted) fetchPaginatedReturns()
+    // eslint-disable-next-line
+  }, [page, size, sortBy, sortDir])
 
   useEffect(() => {
       setMounted(true);
@@ -41,14 +57,26 @@ const ReturnPage = () => {
     }
   }
 
-  const fetchAllReturns = async () => {
+
+  // Fetch paginated and filtered returns
+  const fetchPaginatedReturns = async (searching = false) => {
+    setSearchLoading(searching)
     try {
-      const res = await axios.get('http://localhost:8080/api/return')
-      // Reverse the array so the latest return is first
-      setAllReturns(res.data.slice().reverse())
+      const params = {
+        page: page - 1, // API is 0-indexed
+        size,
+        sortBy,
+        sortDir,
+      }
+      if (searchReturnNo) params.ReturnNo = searchReturnNo
+      if (searchCreatedAt) params.CreatedAt = searchCreatedAt
+      const res = await axios.get('http://localhost:8080/api/return/allby', { params })
+      setAllReturns(res.data.content || [])
+      setTotalReturns(res.data.totalElements || 0)
     } catch (err) {
       customToast('error', 'Failed to fetch returns')
     }
+    setSearchLoading(false)
   }
 
   // Generate next return order number
@@ -183,7 +211,7 @@ const ReturnPage = () => {
       })
       customToast('success', 'Return submitted successfully')
       resetAll()
-      fetchAllReturns()
+  fetchPaginatedReturns()
     } catch (err) {
       console.log(err);
       customToast('error', err.response?.data?.message || 'Failed to submit return')
@@ -430,6 +458,62 @@ const ReturnPage = () => {
         </div>
       )}
 
+      {/* Search & Pagination Controls - Styled Card */}
+      {mounted && (
+        <div className="mt-12 mb-6">
+          <div className="bg-white p-6 rounded-lg shadow-md">
+            <h3 className="text-lg font-semibold mb-4">Filter Returns</h3>
+            <div className="flex flex-wrap gap-4 items-end">
+              <div className="flex flex-col">
+                <label className="mb-2 text-sm font-medium text-gray-700">Search by Return No</label>
+                <Input.Search
+                  placeholder="Enter Return No"
+                  value={searchReturnNo}
+                  onChange={e => setSearchReturnNo(e.target.value)}
+                  onSearch={() => { setPage(1); fetchPaginatedReturns(true); }}
+                  style={{ width: 300 }}
+                  prefix={<SearchOutlined />}
+                  allowClear
+                  enterButton
+                  loading={searchLoading}
+                />
+              </div>
+              <div className="flex flex-col">
+                <label className="mb-2 text-sm font-medium text-gray-700">Created At</label>
+                <Input
+                  type="date"
+                  value={searchCreatedAt}
+                  onChange={e => setSearchCreatedAt(e.target.value)}
+                  style={{ width: 180 }}
+                />
+              </div>
+              <Button
+                onClick={() => {
+                  setSearchReturnNo('');
+                  setSearchCreatedAt('');
+                  setPage(1);
+                  fetchPaginatedReturns(true);
+                }}
+                style={{ height: 32 }}
+              >
+                Clear
+              </Button>
+            </div>
+            <div className="mt-4 text-sm text-gray-600">
+              {searchReturnNo || searchCreatedAt ? (
+                <p>
+                  Filtering by
+                  {searchReturnNo && ` Return No: "${searchReturnNo}"`}
+                  {searchCreatedAt && ` Created At: ${searchCreatedAt}`}
+                </p>
+              ) : (
+                <p>Showing all {totalReturns} returns</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* All Returns Expandable Table */}
      { mounted && <div className="mt-12">
         <h2 className="text-xl text-white font-bold mb-4" style={{ fontFamily: 'Poppins, sans-serif' }}>All Returns</h2>
@@ -441,11 +525,22 @@ const ReturnPage = () => {
             defaultExpandedRowKeys: [],
             columnWidth: "100px",
           }}
-          pagination={{ 
-            pageSize: 10,
-            showSizeChanger: false,
+          pagination={{
+            current: page,
+            pageSize: size,
+            total: totalReturns,
+            showSizeChanger: true,
+            pageSizeOptions: ['5', '10', '20', '50'],
             showQuickJumper: true,
-            showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} items`
+            showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} items`,
+            onChange: (p, s) => { setPage(p); setSize(s); },
+          }}
+          loading={searchLoading}
+          onChange={(pagination, filters, sorter) => {
+            if (sorter && sorter.field) {
+              setSortBy(sorter.field);
+              setSortDir(sorter.order === 'ascend' ? 'asc' : 'desc');
+            }
           }}
           size="large"
           className="text-base"
