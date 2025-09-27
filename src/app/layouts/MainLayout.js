@@ -19,8 +19,6 @@ export default function MainLayout({ children }) {
     { name: 'Logout', path: '/login' }
   ];
 
-
-
   return (
     <div className="flex h-screen">
       <aside

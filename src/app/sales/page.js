@@ -67,6 +67,7 @@ const page = () => {
     const [reportStartDate, setReportStartDate] = useState(null); // dayjs or null
     const [reportEndDate, setReportEndDate] = useState(null);     // dayjs or null
     const [reportLoading, setReportLoading] = useState(false);
+    const [totalExpenses, setTotalExpenses] = useState(false);
 
   const getCurrentSalesNumber = async () => {
     try {
@@ -198,12 +199,6 @@ const page = () => {
     }
   };
 
-  // Reset the two date pickers
-const clearReportDates = () => {
-  setReportStartDate(null);
-  setReportEndDate(null);
-};
-
 // Safely open a base64 PDF in a new tab
 const openPdfInNewTab = (pdfBase64) => {
   try {
@@ -241,12 +236,13 @@ const generateSalesReport = async () => {
 
   const startDate = reportStartDate.format('YYYY-MM-DD');
   const endDate = reportEndDate.format('YYYY-MM-DD');
+  const expenses = totalExpenses ? totalExpenses : 0
 
   setReportLoading(true);
   try {
     const url = `http://localhost:8080/api/reports/sales-orders`;
     const res = await axios.get(url, {
-      params: { startDate, endDate },
+      params: { startDate, endDate, expenses },
     });
 
     const pdfBase64 = res?.data?.pdfBase64;
@@ -728,7 +724,6 @@ const generateSalesReport = async () => {
                 setCreateCustomer={setCreateCustomer} 
               />
             )}
-
           </div>
     </div>}
 
@@ -904,7 +899,32 @@ const generateSalesReport = async () => {
         inputReadOnly
       />
     </div>
+
   </div>
+  
+      <div className="flex w-full flex-col gap-1">
+        <label className='mb-1 text-white'>Total Optional Expenses</label>
+               <InputNumber
+                value={ totalExpenses }
+                formatter={(value) => value?.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") }
+                parser={(value) => value.replace(/\$\s?|(,*)/g, "")}
+                onChange={(e)=>setTotalExpenses(e)}
+                placeholder="Total Optional Expenses"  
+                className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-white"
+                style={{
+                    width: "100%", 
+                    height: 48,
+                    borderRadius: 7,
+                    display: 'flex',
+                    alignItems: 'center',
+                    fontFamily: "Poppins, sans-serif",
+                    fontSize: 16 }}
+                    inputStyle={{
+                    fontFamily: "Poppins, sans-serif",
+                    fontSize: 16,
+                   }}
+         />
+   </div>
    <div className="flex gap-2 ml-auto">
       <Button
         type="primary"

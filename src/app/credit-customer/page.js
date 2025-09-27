@@ -1,8 +1,10 @@
+
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Table, Button, Popconfirm, Input, Form, Modal, Tag } from 'antd';
-import { EditOutlined, DeleteOutlined, UnorderedListOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import { EditOutlined, DeleteOutlined, UnorderedListOutlined, CheckCircleOutlined, SearchOutlined, ClearOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import CreateCustomer from '../components/CreateCustomer';
 import MainLayout from '../layouts/MainLayout';
@@ -26,6 +28,10 @@ export default function CreditCustomer() {
   const [creditOrdersLoading, setCreditOrdersLoading] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
+  
+  // New state for credit orders search
+  const [creditOrderSearchText, setCreditOrderSearchText] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
 
   // Existing fetch customers function
   const fetchCustomers = useCallback(async () => {
@@ -62,13 +68,19 @@ export default function CreditCustomer() {
     }
   }, []);
 
-  // New function to fetch credit orders
-  const fetchCreditOrders = useCallback(async (customerId) => {
+  // Updated function to fetch credit orders with search
+  const fetchCreditOrders = useCallback(async (customerId, searchText = '') => {
     try {
       setCreditOrdersLoading(true);
-      console.log('Fetching credit orders for customer:', customerId);
+      setIsSearching(!!searchText);
+      console.log('Fetching credit orders for customer:', customerId, 'with search:', searchText);
       
-      const response = await fetch(`http://localhost:8080/api/customer/credit-orders/${customerId}`, {
+      let url = `http://localhost:8080/api/customer/credit-orders/${customerId}`;
+      if (searchText && searchText.trim()) {
+        url += `?searchText=${encodeURIComponent(searchText.trim())}`;
+      }
+      
+      const response = await fetch(url, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -91,27 +103,50 @@ export default function CreditCustomer() {
       setCreditOrders([]);
     } finally {
       setCreditOrdersLoading(false);
+      setIsSearching(false);
     }
   }, []);
 
-  // New function to handle payment status update
-  const handlePaymentStatusUpdate = async (salesOrderId) => {
+  // Handle credit orders search
+  const handleCreditOrderSearch = useCallback(() => {
+    if (selectedCustomer) {
+      fetchCreditOrders(selectedCustomer.id, creditOrderSearchText);
+    }
+  }, [selectedCustomer, creditOrderSearchText, fetchCreditOrders]);
+
+  // Handle search input change with debouncing
+  useEffect(() => {
+    if (!selectedCustomer) return;
+    
+    const timeoutId = setTimeout(() => {
+      fetchCreditOrders(selectedCustomer.id, creditOrderSearchText);
+    }, 500); // 500ms debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [creditOrderSearchText, selectedCustomer, fetchCreditOrders]);
+
+  // Clear credit orders search
+  const handleClearCreditOrderSearch = () => {
+    setCreditOrderSearchText('');
+    if (selectedCustomer) {
+      fetchCreditOrders(selectedCustomer.id, '');
+    }
+  };
+
+  // Toggle payment status handler
+  const handlePaymentStatusUpdate = async (salesOrderId, currentStatus) => {
     try {
       setPaymentLoading(true);
-      console.log('Updating payment status for order:', salesOrderId);
-      
-      const response = await axios.put(`http://localhost:8080/api/sales-order/credit-payment-status/${salesOrderId}`);
-      
-      console.log('Payment status update response:', response.data);
-      customToast('success', "Payment status updated successfully");
-      
-      // Refresh credit orders
+      const newStatus = !currentStatus;
+      const response = await axios.put(
+        `http://localhost:8080/api/sales-order/credit-payment-status/${salesOrderId}`,
+        { status: newStatus }
+      );
+      customToast('success', `Payment status marked as ${newStatus ? 'PAID' : 'PENDING'}`);
       if (selectedCustomer) {
-        fetchCreditOrders(selectedCustomer.id);
+        fetchCreditOrders(selectedCustomer.id, creditOrderSearchText);
       }
-      
     } catch (error) {
-      console.error('Payment status update error:', error);
       customToast('error', `Error updating payment status: ${error.message}`);
     } finally {
       setPaymentLoading(false);
@@ -152,11 +187,12 @@ export default function CreditCustomer() {
     });
   };
 
-  // New function to handle showing credit orders
+  // Updated function to handle showing credit orders
   const handleShowCreditOrders = (customer) => {
     setSelectedCustomer(customer);
     setShowCreditOrdersModal(true);
-    fetchCreditOrders(customer.id);
+    setCreditOrderSearchText(''); // Reset search text
+    fetchCreditOrders(customer.id, ''); // Fetch all orders initially
   };
 
   const handleDelete = async (data) => {
@@ -335,6 +371,8 @@ export default function CreditCustomer() {
       dataIndex: 'createdAt',
       key: 'createdAt',
       width: 120,
+      sorter: (a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
       render: (date) => date ? new Date(date).toLocaleDateString() : '-',
     },
     {
@@ -349,30 +387,53 @@ export default function CreditCustomer() {
       key: 'actions',
       width: 100,
       render: (_, record) => (
-        <Button
-          type="primary"
-          icon={<CheckCircleOutlined />}
-          onClick={() => handlePaymentStatusUpdate(record.id)}
-          size="small"
-          disabled={record.status === true || paymentLoading}
-          loading={paymentLoading}
-          style={{
-            backgroundColor: record.status === true ? '#d9d9d9' : '#1890ff',
-            borderColor: record.status === true ? '#d9d9d9' : '#1890ff',
-            borderRadius: 50,
-            padding: 15
-          }}
-          title={record.status === true ? 'Already Paid' : 'Mark as Paid'}
-        />
+        <Popconfirm
+          title={record.status ? "Mark as Pending" : "Mark as Paid"}
+          description={
+            record.status
+              ? "Are you sure you want to mark this order as pending?"
+              : "Are you sure you want to mark this order as paid?"
+          }
+          onConfirm={() => handlePaymentStatusUpdate(record.id, record.status)}
+          okText="Confirm"
+          cancelText="Cancel"
+          okButtonProps={{ className: "custom-popconfirm-btn-ok" }}
+          cancelButtonProps={{ className: "custom-popconfirm-btn-cancel" }}
+          disabled={paymentLoading}
+        >
+          <Button
+            type="primary"
+            icon={<CheckCircleOutlined />}
+            size="small"
+            loading={paymentLoading}
+            style={{
+              backgroundColor: record.status === true ? '#d9d9d9' : '#1890ff',
+              borderColor: record.status === true ? '#d9d9d9' : '#1890ff',
+              borderRadius: 50,
+              padding: 15
+            }}
+            title={record.status ? 'Mark as Pending' : 'Mark as Paid'}
+          />
+        </Popconfirm>
       ),
     },
   ];
 
-  // Handler for when customer is created
   const handleCustomerCreated = useCallback(async () => {
     await fetchCustomers();
     setCreateCustomer(false);
   }, [fetchCustomers]);
+
+  // Function to determine what message to show when no data
+  const getNoDataMessage = () => {
+    if (isSearching || creditOrdersLoading) {
+      return "Searching...";
+    }
+    if (creditOrderSearchText.trim()) {
+      return `No credit orders found matching "${creditOrderSearchText}"`;
+    }
+    return "No credit orders found for this customer";
+  };
 
   return (
     <MainLayout>
@@ -532,16 +593,74 @@ export default function CreditCustomer() {
           setShowCreditOrdersModal(false);
           setSelectedCustomer(null);
           setCreditOrders([]);
+          setCreditOrderSearchText('');
         }}
         footer={null}
-        width={1000}
+        width={1200}
         className="credit-orders-modal"
         style={{ fontFamily: 'Poppins' }}
       >
         <div className="mt-4">
+          {/* Search Bar for Credit Orders */}
+          <div className="mb-4 flex gap-2">
+            <Input
+              placeholder="Search by Order No, Date, or Amount..."
+              value={creditOrderSearchText}
+              onChange={(e) => setCreditOrderSearchText(e.target.value)}
+              prefix={<SearchOutlined />}
+              style={{
+                height: 40,
+                fontSize: 14,
+                fontFamily: 'Poppins',
+                flex: 1
+              }}
+              // disabled={creditOrdersLoading}
+            />
+            <Button
+              type="primary"
+              icon={<SearchOutlined />}
+              onClick={handleCreditOrderSearch}
+              loading={creditOrdersLoading}
+              style={{
+                height: 40,
+                backgroundColor: '#1890ff',
+                borderColor: '#1890ff',
+                fontFamily: 'Poppins'
+              }}
+            >
+              Search
+            </Button>
+            <Button
+              icon={<ClearOutlined />}
+              onClick={handleClearCreditOrderSearch}
+              disabled={creditOrdersLoading || !creditOrderSearchText}
+              style={{
+                height: 40,
+                fontFamily: 'Poppins'
+              }}
+            >
+              Clear
+            </Button>
+          </div>
+
+          {/* Search Results Info */}
+          {creditOrderSearchText && !creditOrdersLoading && (
+            <div className="mb-3">
+              <p className="text-sm text-gray-600" style={{ fontFamily: 'Poppins' }}>
+                {creditOrders.length === 0 
+                  ? `No results found for "${creditOrderSearchText}"` 
+                  : `Found ${creditOrders.length} result${creditOrders.length === 1 ? '' : 's'} for "${creditOrderSearchText}"`
+                }
+              </p>
+            </div>
+          )}
+
+          {/* Credit Orders Table */}
           {creditOrders.length === 0 && !creditOrdersLoading ? (
             <div className="text-center py-8">
-              <p className="text-gray-500 text-lg" style={{ fontFamily: 'Poppins' }}>No credit orders found for this customer</p>
+              <p className="text-gray-500 text-lg" style={{ fontFamily: 'Poppins' }}>
+                {getNoDataMessage()}
+              </p>
             </div>
           ) : (
             <Table
@@ -551,11 +670,18 @@ export default function CreditCustomer() {
               loading={creditOrdersLoading}
               pagination={{
                 pageSize: 5,
+                showSizeChanger: false,
+                showQuickJumper: true,
+                showTotal: (total, range) => 
+                  `${range[0]}-${range[1]} of ${total} orders`,
               }}
               size="middle"
               className="nested-table custom-pagination" 
               scroll={{ x: 700 }}
               style={{ fontFamily: 'Poppins' }}
+              locale={{
+                emptyText: getNoDataMessage()
+              }}
             />
           )}
         </div>

@@ -17,9 +17,9 @@ export default function HomePage() {
 
   return (
     <ProtectedRoute>
-    <MainLayout>
+     <MainLayout>
       <ToastContainer/>
-    </MainLayout>
+     </MainLayout>
     </ProtectedRoute>
   );
 }
