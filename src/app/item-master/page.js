@@ -278,6 +278,8 @@ export default function ItemMaster() {
     setEditingItem(null);
   };
 
+  const covertMLtoLitres = (ml) =>  ml ? (ml / 1000).toFixed(3) : '0.000';
+
   const handleAddBrand = () => setCreateBrand(true);
 
   const handleDeleteBrand = async (id) => {
@@ -305,105 +307,102 @@ export default function ItemMaster() {
     }
   };
 
-  const columns = [
-    { 
-      title: 'Item Code', 
-      dataIndex: 'itemCode', 
-      key: 'itemCode', 
-      sorter: true,
-      width: 150
+ const columns = [
+  { 
+    title: 'Item Code', 
+    dataIndex: 'itemCode', 
+    key: 'itemCode', 
+    sorter: true,
+    width: 150
+  },
+  { 
+    title: 'Brand', 
+    dataIndex: ['itemBrand', 'brandName'], 
+    key: 'brandName', 
+    sorter: true,
+    width: 120
+  },
+  { 
+    title: 'Retail Price', 
+    dataIndex: 'retailPrice', 
+    key: 'retailPrice', 
+    sorter: true,
+    width: 120,
+    render: (value) => value ? value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "-" 
+  },
+  { 
+    title: 'Wholesale Price', 
+    dataIndex: 'wholesalePrice', 
+    key: 'wholesalePrice', 
+    sorter: true,
+    width: 130,
+    render: (value) => value ? value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "-" 
+  },
+  { 
+    title: 'Available Stock', 
+    dataIndex: 'availableStock', 
+    key: 'availableStock',
+    width: 120
+  },
+  { 
+    title: 'Stock (Liters)', 
+    dataIndex: 'stockInMillilitres', // Changed from 'stockInLiters' to 'stockInMillilitres'
+    key: 'stockInLiters',
+    width: 120,
+    render: (value) => {
+      // Convert millilitres to litres and format with commas
+      const litres = covertMLtoLitres(value);
+      return litres ? litres.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") + " L" : "-";
+    }
+  },
+  {
+    title: 'Date',
+    dataIndex: 'createdDateTime',
+    key: 'createdDateTime',
+    width: 100,
+    sorter: (a, b) =>
+      new Date(a.createdDateTime).getTime() - new Date(b.createdDateTime).getTime(),
+    render: (value) => {
+      const date = new Date(value);
+      return date.toISOString().split('T')[0]; // shows YYYY-MM-DD
     },
-    { 
-      title: 'Brand', 
-      dataIndex: ['itemBrand', 'brandName'], 
-      key: 'brandName', 
-      sorter: true,
-      width: 120
-    },
-    { 
-      title: 'Retail Price', 
-      dataIndex: 'retailPrice', 
-      key: 'retailPrice', 
-      sorter: true,
-      width: 120,
-      render: (value) => value ? value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "-" 
-    },
-    { 
-      title: 'Wholesale Price', 
-      dataIndex: 'wholesalePrice', 
-      key: 'wholesalePrice', 
-      sorter: true,
-      width: 130,
-      render: (value) => value ? value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "-" 
-    },
-    { 
-      title: 'Available Stock', 
-      dataIndex: 'availableStock', 
-      key: 'availableStock',
-      width: 120
-    },
-    { 
-      title: 'Stock (Liters)', 
-      dataIndex: 'stockInLiters', 
-      key: 'stockInLiters',
-      width: 120,
-      render: (value) => value ? value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "-" 
-    },
-    { 
-      title: 'Stock (Millilitres)', 
-      dataIndex: 'stockInMillilitres', 
-      key: 'stockInMillilitres',
-      width: 150,
-      render: (value) => value ? value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "-"
-    },
-    {
-      title: 'Date',
-      dataIndex: 'createdDateTime',
-      key: 'createdDateTime',
-      width: 100,
-      sorter: (a, b) =>
-        new Date(a.createdDateTime).getTime() - new Date(b.createdDateTime).getTime(),
-      render: (value) => {
-        const date = new Date(value);
-        return date.toISOString().split('T')[0]; // shows YYYY-MM-DD
-      },
-    },    
-    {
-      title: 'Action', 
-      key: 'action', 
-      width: 120,
-      render: (_, record) => (
-        <>
+  },    
+  {
+    title: 'Action', 
+    key: 'action', 
+    width: 120,
+    render: (_, record) => (
+      <>
+        <Button 
+          type="primary" 
+          icon={<EditOutlined />} 
+          onClick={() => handleEdit(record)} 
+          size="small" 
+          style={{ marginRight: 8, borderRadius: 50, padding: 15 }}
+          loading={loading}
+        />
+        <Popconfirm
+          title="Delete Item"
+          description="Are you sure to delete this item ?"
+          onConfirm={() => handleDelete(record)}
+          okText="Confirm"
+          cancelText="Cancel"
+          okButtonProps={{ className: "custom-popconfirm-btn-ok" }}
+          cancelButtonProps={{ className: "custom-popconfirm-btn-cancel" }}
+        >
           <Button 
             type="primary" 
-            icon={<EditOutlined />} 
-            onClick={() => handleEdit(record)} 
+            danger 
+            icon={<DeleteOutlined />} 
             size="small" 
-            style={{ marginRight: 8, borderRadius: 50, padding: 15 }}
+            style={{ borderRadius: 50, padding: 15 }}
             loading={loading}
           />
-          <Popconfirm
-            title="Delete Item"
-            description="Are you sure to delete this item ?"
-            onConfirm={() => handleDelete(record)}
-            okText="Confirm"
-            cancelText="Cancel"
-            okButtonProps={{ className: "custom-popconfirm-btn-ok" }}
-            cancelButtonProps={{ className: "custom-popconfirm-btn-cancel" }}
-          >
-            <Button 
-              type="primary" 
-              danger 
-              icon={<DeleteOutlined />} 
-              size="small" 
-              style={{ borderRadius: 50, padding: 15 }}
-              loading={loading}
-            />
-          </Popconfirm>
-        </>
-      ),
-    },
-  ];
+        </Popconfirm>
+      </>
+    ),
+  },
+];
 
   // Handler for when brand is created
   const handleBrandCreated = useCallback(async () => {

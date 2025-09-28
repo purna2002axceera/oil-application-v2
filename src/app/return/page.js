@@ -219,12 +219,23 @@ const ReturnPage = () => {
     setIsSubmitting(false)
   }
 
-  // Expandable table for all returns
+  // Updated nested columns - removed ML column, convert ML to L
   const nestedColumns = [
     { title: 'Item', dataIndex: 'itemName', key: 'itemName', width: 150 },
     { title: 'Quantity', dataIndex: 'quantity', key: 'quantity', render: (q, r) => r.isLoose ? '-' : q, width: 120 },
-    { title: 'Quantity ML', dataIndex: 'quantityMiliLitres', key: 'quantityMiliLitres', render: (q, r) => r.isLoose ? q : '-', width: 120 },
-    { title: 'Quantity L', dataIndex: 'quantityLitres', key: 'quantityLitres', render: (q, r) => r.isLoose ? q : '-', width: 120 },
+    { 
+      title: 'Quantity (Liters)', 
+      dataIndex: 'quantityMiliLitres', 
+      key: 'quantityLitres', 
+      render: (ml, record) => {
+        if (record.isLoose) {
+          // Convert milliliters to liters with 3 decimal places
+          return ml ? (ml / 1000).toFixed(3) : '0.000';
+        }
+        return '-';
+      }, 
+      width: 120 
+    },
     { title: 'Is Loose', dataIndex: 'isLoose', key: 'isLoose', render: v => v ? 'Yes' : 'No', width: 120 },
   ]
 
@@ -249,6 +260,9 @@ const ReturnPage = () => {
       rowClassName="editable-row"
     />
   )
+
+  const covertMLtoLitres = (ml) =>  ml ? (ml / 1000).toFixed(3) : '0.000';
+
 
   return (
     <MainLayout>
@@ -389,8 +403,7 @@ const ReturnPage = () => {
         </div>
       </div> }
 
-      {/* Items Table */}
-      {/* Items Table */}
+      {/* Updated Items Table - removed ML column, convert ML to L */}
       { mounted && returnItems.length > 0 && (
         <div className="mt-8">
           <h2 className="text-xl text-white font-bold mb-4" style={{ fontFamily: 'Poppins, sans-serif' }}>Added Items</h2>
@@ -400,8 +413,7 @@ const ReturnPage = () => {
                 <tr>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Item</th>
                   <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Quantity</th>
-                  <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Quantity ML</th>
-                  <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Quantity L</th>
+                  <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Quantity (Liters)</th>
                   <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Is Loose</th>
                 </tr>
               </thead>
@@ -413,10 +425,7 @@ const ReturnPage = () => {
                       {item.isLoose ? '-' : item.quantity}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900 text-center">
-                      {item.isLoose ? item.quantityMiliLitres : '-'}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-900 text-center">
-                      {item.isLoose ? item.quantityLitres : '-'}
+                      {item.isLoose ? (item.quantityMiliLitres / 1000).toFixed(3) : '-'}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900 text-center">
                       {item.isLoose ? 'Yes' : 'No'}
@@ -427,10 +436,7 @@ const ReturnPage = () => {
               <tfoot className="bg-gray-50">
                 <tr>
                   <td colSpan="4" className="px-4 py-3 text-right font-semibold text-gray-900" style={{ fontFamily: 'Poppins, sans-serif' }}>
-                    Total Items:
-                  </td>
-                  <td className="px-4 py-3 text-center font-bold text-gray-900" style={{ fontFamily: 'Poppins, sans-serif' }}>
-                    {grandTotal}
+                    Total Items: {grandTotal}
                   </td>
                 </tr>
               </tfoot>

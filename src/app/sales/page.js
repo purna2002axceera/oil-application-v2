@@ -59,22 +59,23 @@ const page = () => {
     const [note, setNote] = useState('')
     const [salesItems, setSalesItems] = useState([])
     const [grandTotal, setGrandTotal] = useState(0)
-  const [allSales, setAllSales] = useState([])
-  const [salesLoading, setSalesLoading] = useState(false)
-  const [salesPage, setSalesPage] = useState(1)
-  const [salesPageSize, setSalesPageSize] = useState(10)
-  const [salesTotal, setSalesTotal] = useState(0)
-  const [searchOrderType, setSearchOrderType] = useState('')
-  const [searchOrderNo, setSearchOrderNo] = useState('')
-  const [searchCreatedAt, setSearchCreatedAt] = useState(null)
+    const [allSales, setAllSales] = useState([])
+    const [salesLoading, setSalesLoading] = useState(false)
+    const [salesPage, setSalesPage] = useState(1)
+    const [salesPageSize, setSalesPageSize] = useState(10)
+    const [salesTotal, setSalesTotal] = useState(0)
+    const [searchOrderType, setSearchOrderType] = useState('')
+    const [searchOrderNo, setSearchOrderNo] = useState('')
+    const [searchCreatedAt, setSearchCreatedAt] = useState(null)
     const [editingKey, setEditingKey] = useState('');
     const [showCreateCustomer, setCreateCustomer] = useState(false)
     const [fixedOrderData, setFixedOrderData] = useState(false)
     const [mounted, setMounted] = useState(false);
-    const [reportStartDate, setReportStartDate] = useState(null); // dayjs or null
-    const [reportEndDate, setReportEndDate] = useState(null);     // dayjs or null
+    const [reportStartDate, setReportStartDate] = useState(null);
+    const [reportEndDate, setReportEndDate] = useState(null);
     const [reportLoading, setReportLoading] = useState(false);
     const [totalExpenses, setTotalExpenses] = useState(false);
+    const [customerCache, setCustomerCache] = useState({});
 
   const getCurrentSalesNumber = async () => {
     try {
@@ -150,32 +151,30 @@ const page = () => {
   };
 
   const fetchCustomerById = async (customerId) => {
-  if (!customerId) return null;
+    if (!customerId) return null;
 
-  // If cached, return directly
-  if (customerCache[customerId]) {
-    return customerCache[customerId];
-  }
+    // If cached, return directly
+    if (customerCache[customerId]) {
+      return customerCache[customerId];
+    }
 
-  // Mark as loading
-  setCustomerCache(prev => ({ ...prev, [customerId]: "loading..." }));
+    // Mark as loading
+    setCustomerCache(prev => ({ ...prev, [customerId]: "loading..." }));
 
-  try {
-    const response = await fetch(`http://localhost:8080/api/customer/${customerId}`);
-    const data = await response.json();
-    const name = data.customerName || `Customer ${customerId}`;
+    try {
+      const response = await fetch(`http://localhost:8080/api/customer/${customerId}`);
+      const data = await response.json();
+      const name = data.customerName || `Customer ${customerId}`;
 
-    // Save in cache
-    setCustomerCache(prev => ({ ...prev, [customerId]: name }));
-    return name;
-  } catch (error) {
-    console.error('Error fetching customer:', error);
-    setCustomerCache(prev => ({ ...prev, [customerId]: `Customer ${customerId}` }));
-    return `Customer ${customerId}`;
-  }
-};
-
-
+      // Save in cache
+      setCustomerCache(prev => ({ ...prev, [customerId]: name }));
+      return name;
+    } catch (error) {
+      console.error('Error fetching customer:', error);
+      setCustomerCache(prev => ({ ...prev, [customerId]: `Customer ${customerId}` }));
+      return `Customer ${customerId}`;
+    }
+  };
 
   const getCustomerName = (customerId) => {
     const customer = customers.find(customer => customer.id === customerId)
@@ -184,106 +183,139 @@ const page = () => {
 
   const fetchAllSales = async () => {
     try {
+      setSalesLoading(true);
       const response = await fetch('http://localhost:8080/api/sales-order');
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
       const data = await response.json();
+      console.log('Raw sales data:', data);
+      
+      if (!Array.isArray(data)) {
+        console.error('Expected array but got:', typeof data, data);
+        setAllSales([]);
+        setSalesTotal(0);
+        return;
+      }
       
       // Fetch customer names for all sales
       const salesWithCustomerNames = await Promise.all(
         data.map(async (sale) => {
-          const formattedCreatedAt = sale.createdAt.split('T')[0]
-          let customerName = getCustomerName(sale.customerId);
-          
-          // If customer not found in local data, fetch from API
-          if (customerName === `Customer ${sale.customerId}`) {
-            customerName = await fetchCustomerById(sale.customerId);
-          }
-          
-          return {
-            ...sale,
-            createdAt: formattedCreatedAt,
-            key: sale.id.toString(),
-            salesNumber: sale.salesOrderNo,
-            customerName: customerName,
-            items: sale.items.map((item, index) => ({
-              ...item,
-              key: `${sale.id}-${item.id || index}`,
-              itemName: getItemName(item.itemId) || `Item ${item.itemId}`,
-              unitPrice: item.soItemUnitPrice,
-              totalPrice: item.soItemTotalAmount,
-              totalAmount: item.soItemTotalAmount
-            }))
+          try {
+            const formattedCreatedAt = sale.createdAt ? sale.createdAt.split('T')[0] : 'Unknown';
+            let customerName = getCustomerName(sale.customerId);
+            
+            // If customer not found in local data, fetch from API
+            if (customerName === `Customer ${sale.customerId}`) {
+              customerName = await fetchCustomerById(sale.customerId);
+            }
+            
+            return {
+              ...sale,
+              createdAt: formattedCreatedAt,
+              key: sale.id ? sale.id.toString() : `unknown-${Math.random()}`,
+              salesNumber: sale.salesOrderNo || 'Unknown',
+              customerName: customerName,
+              items: (sale.items || []).map((item, index) => ({
+                ...item,
+                key: `${sale.id}-${item.id || index}`,
+                itemName: getItemName(item.itemId) || `Item ${item.itemId}`,
+                unitPrice: item.soItemUnitPrice || 0,
+                totalPrice: item.soItemTotalAmount || 0,
+                totalAmount: item.soItemTotalAmount || 0
+              }))
+            };
+          } catch (error) {
+            console.error('Error processing sale:', sale, error);
+            return {
+              ...sale,
+              createdAt: sale.createdAt?.split('T')[0] || 'Unknown',
+              key: sale.id?.toString() || `unknown-${Math.random()}`,
+              salesNumber: sale.salesOrderNo || 'Unknown',
+              customerName: 'Error loading',
+              items: []
+            };
           }
         })
       );
-      console.log('Sales with customer names:', salesWithCustomerNames)
+      
+      console.log('Processed sales with customer names:', salesWithCustomerNames);
       setAllSales(salesWithCustomerNames);
-      console.log('All Sales:', data)
+      setSalesTotal(salesWithCustomerNames.length);
+      
     } catch (error) {
       console.error('Error fetching Sales:', error);
+      customToast('error', `Failed to fetch sales: ${error.message}`);
+      setAllSales([]);
+      setSalesTotal(0);
+    } finally {
+      setSalesLoading(false);
     }
   };
 
-// Safely open a base64 PDF in a new tab
-const openPdfInNewTab = (pdfBase64) => {
-  try {
-    // Accept both raw base64 or data URLs
-    const clean = (pdfBase64 || '').includes(',')
-      ? pdfBase64.split(',').pop()
-      : pdfBase64;
+  // Safely open a base64 PDF in a new tab
+  const openPdfInNewTab = (pdfBase64) => {
+    try {
+      // Accept both raw base64 or data URLs
+      const clean = (pdfBase64 || '').includes(',')
+        ? pdfBase64.split(',').pop()
+        : pdfBase64;
 
-    const byteChars = atob(clean);
-    const byteNumbers = new Array(byteChars.length);
-    for (let i = 0; i < byteChars.length; i++) {
-      byteNumbers[i] = byteChars.charCodeAt(i);
+      const byteChars = atob(clean);
+      const byteNumbers = new Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) {
+        byteNumbers[i] = byteChars.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+
+      // Open in new tab
+      window.open(url, '_blank', 'noopener,noreferrer');
+
+      // Revoke later to free memory
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (err) {
+      console.error('PDF open error:', err);
+      customToast('error', 'Could not open the PDF.');
     }
-    const byteArray = new Uint8Array(byteNumbers);
-    const blob = new Blob([byteArray], { type: 'application/pdf' });
-    const url = URL.createObjectURL(blob);
+  };
 
-    // Open in new tab
-    window.open(url, '_blank', 'noopener,noreferrer');
-
-    // Revoke later to free memory
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  } catch (err) {
-    console.error('PDF open error:', err);
-    customToast('error', 'Could not open the PDF.');
-  }
-};
-
-// Call your API and open the returned PDF
-const generateSalesReport = async () => {
-  if (!reportStartDate || !reportEndDate) {
-    customToast('error', 'Please select both From Date and To Date.');
-    return;
-  }
-
-  const startDate = reportStartDate.format('YYYY-MM-DD');
-  const endDate = reportEndDate.format('YYYY-MM-DD');
-  const expenses = totalExpenses ? totalExpenses : 0
-
-  setReportLoading(true);
-  try {
-    const url = `http://localhost:8080/api/reports/sales-orders`;
-    const res = await axios.get(url, {
-      params: { startDate, endDate, expenses },
-    });
-
-    const pdfBase64 = res?.data?.pdfBase64;
-    if (!pdfBase64) {
-      customToast('error', 'Report response did not include pdfBase64.');
+  // Call your API and open the returned PDF
+  const generateSalesReport = async () => {
+    if (!reportStartDate || !reportEndDate) {
+      customToast('error', 'Please select both From Date and To Date.');
       return;
     }
 
-    openPdfInNewTab(pdfBase64);
-    customToast('success', 'Report generated.');
-  } catch (error) {
-    console.error('Report error:', error);
-    customToast('error', error?.response?.data?.message || 'Failed to generate report.');
-  } finally {
-    setReportLoading(false);
-  }
-};
+    const startDate = reportStartDate.format('YYYY-MM-DD');
+    const endDate = reportEndDate.format('YYYY-MM-DD');
+    const expenses = totalExpenses ? totalExpenses : 0
+
+    setReportLoading(true);
+    try {
+      const url = `http://localhost:8080/api/reports/sales-orders`;
+      const res = await axios.get(url, {
+        params: { startDate, endDate, expenses },
+      });
+
+      const pdfBase64 = res?.data?.pdfBase64;
+      if (!pdfBase64) {
+        customToast('error', 'Report response did not include pdfBase64.');
+        return;
+      }
+
+      openPdfInNewTab(pdfBase64);
+      customToast('success', 'Report generated.');
+    } catch (error) {
+      console.error('Report error:', error);
+      customToast('error', error?.response?.data?.message || 'Failed to generate report.');
+    } finally {
+      setReportLoading(false);
+    }
+  };
 
   useEffect(() => {
     getCurrentSalesNumber();
@@ -293,9 +325,11 @@ const generateSalesReport = async () => {
 
   // Fetch sales when search or pagination changes
   useEffect(() => {
-    fetchAllSales();
+    if (mounted) {
+      fetchAllSales();
+    }
     // eslint-disable-next-line
-  }, [salesPage, salesPageSize, searchOrderType, searchOrderNo, searchCreatedAt]);
+  }, [mounted, salesPage, salesPageSize, searchOrderType, searchOrderNo, searchCreatedAt]);
 
   useEffect(() => {
     autoCalculateTotalPrice()
@@ -423,8 +457,6 @@ const generateSalesReport = async () => {
     resetForAddItem()
   }
 
-  
-
   const handleRemoveItem = (index) => {
     const updatedItems = salesItems.filter((_, i) => i !== index)
     setSalesItems(updatedItems)
@@ -452,53 +484,51 @@ const generateSalesReport = async () => {
     setSalesItems(updatedItems)
   }
 
-
   const handleCreateSale = async () => {
-  if (salesItems.length === 0) {
-    customToast('error', 'Please add at least one item')
-    return
+    if (salesItems.length === 0) {
+      customToast('error', 'Please add at least one item')
+      return
+    }
+
+    // Get the customer ID from the first item (assuming all items have the same customer)
+    const firstItem = salesItems[0]
+    const selectedCustomer = customers.find(customer => customer.customerName === firstItem.customer_name)
+
+    const salesData = {
+      salesOrderNo: salesNumber,
+      salesOrderType: orderType,
+      totalAmount: parseFloat(grandTotal), // Ensure it's a number
+      customerId: parseInt(selectedCustomer?.id || null), // Ensure it's a number
+      note: note || "",
+      createdAt: new Date().toISOString(),
+      items: salesItems.map(item => ({
+        itemId: parseInt(item.itemId), // Ensure it's a number
+        quantity: parseInt(item?.quantity || null), // Ensure it's a number
+        quantityLiters: parseFloat(item?.quantityLiters || null),
+        isLoose: item?.isLoose,
+        quantityMilliliters: parseInt(item?.quantityMilliliters || null),
+        soItemUnitPrice: parseFloat(item.unitPrice), // Ensure it's a number
+        soItemTotalAmount: parseFloat(item.totalPrice), // Ensure it's a number
+        createdAt: new Date().toISOString()
+      }))
+    }
+
+    console.log('Sales Data being sent:', JSON.stringify(salesData, null, 2)); // Debug log
+
+    try {
+      const response = await axios.post('http://localhost:8080/api/sales-order', salesData, {
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      })
+      customToast('success', 'Sale created successfully')
+      resetAll()
+      fetchAllSales() // Refresh the sales list
+    } catch (error) {
+      console.error('Sales creation error:', error.response?.data || error.message)
+      customToast('error', `Error creating sale: ${error.response?.data?.message || error.message}`)
+    }
   }
-
-  // Get the customer ID from the first item (assuming all items have the same customer)
-  const firstItem = salesItems[0]
-  const selectedCustomer = customers.find(customer => customer.customerName === firstItem.customer_name)
-
-
-  const salesData = {
-    salesOrderNo: salesNumber,
-    salesOrderType: orderType,
-    totalAmount: parseFloat(grandTotal), // Ensure it's a number
-    customerId: parseInt(selectedCustomer?.id || null), // Ensure it's a number
-    note: note || "",
-    createdAt: new Date().toISOString(),
-    items: salesItems.map(item => ({
-      itemId: parseInt(item.itemId), // Ensure it's a number
-      quantity: parseInt(item?.quantity || null), // Ensure it's a number
-      quantityLiters: parseFloat(item?.quantityLiters || null),
-      isLoose: item?.isLoose,
-      quantityMilliliters: parseInt(item?.quantityMilliliters || null),
-      soItemUnitPrice: parseFloat(item.unitPrice), // Ensure it's a number
-      soItemTotalAmount: parseFloat(item.totalPrice), // Ensure it's a number
-      createdAt: new Date().toISOString()
-    }))
-  }
-
-  console.log('Sales Data being sent:', JSON.stringify(salesData, null, 2)); // Debug log
-
-  try {
-    const response = await axios.post('http://localhost:8080/api/sales-order', salesData, {
-      headers: {
-        'Content-Type': 'application/json',
-      }
-    })
-    customToast('success', 'Sale created successfully')
-    resetAll()
-    fetchAllSales() // Refresh the sales list
-  } catch (error) {
-    console.error('Sales creation error:', error.response?.data || error.message)
-    customToast('error', `Error creating sale: ${error.response?.data?.message || error.message}`)
-  }
-}
 
   const handleDeleteSale = async (salesId) => {
     try {
@@ -524,14 +554,16 @@ const generateSalesReport = async () => {
   // Editable functions for nested table
   const isEditing = (record) => record.key === editingKey;
 
+  const covertMLtoLitres = (ml) =>  ml ? (ml / 1000).toFixed(3) : '0.000';
+
   const nestedColumns = [
     {
       title: 'Item Code',
       dataIndex: 'itemId',
       key: 'itemId',
       render: (code) => {
-        const itemSelected = items.find((item)=>item.id === code)
-        return itemSelected.itemCode;
+        const itemSelected = items.find((item) => item.id === code);
+        return itemSelected ? itemSelected.itemCode : `Item ${code}`;
       },
       editable: true,
     },
@@ -543,18 +575,14 @@ const generateSalesReport = async () => {
       editable: true,
     },
     {
-  title: 'Quantity ML',
-  dataIndex: 'quantityMilliliters',
-  key: 'quantity',
-  render: (qty) =>
-   qty ? `${parseFloat(qty || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : 'N/A',
-  editable: true,
-},
-      {
-      title: 'Quantity L',
+      title: 'Quantity (Liters)',
       dataIndex: 'quantityMilliliters',
-      key: 'quantityMilliliters',
-      render: (quantity) => quantity ? quantity/1000 : 'N/A',
+      key: 'quantityLiters',
+      render: (quantityML) => {
+        if (!quantityML) return 'N/A';
+        const liters = quantityML / 1000;
+        return liters.toFixed(3);
+      },
       editable: true,
     },
     {
@@ -564,23 +592,22 @@ const generateSalesReport = async () => {
       render: (value) => value === true ? 'Yes' : 'No',
       editable: true,
     },
- {
-  title: 'Unit Price',
-  dataIndex: 'unitPrice',
-  key: 'unitPrice',
-  render: (price) => 
-    `${parseFloat(price || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-  editable: true,
-},
-{
-  title: 'Total Amount',
-  dataIndex: 'totalAmount',
-  key: 'totalAmount',
-  render: (amount, record) => 
-    `${parseFloat(amount || record.totalPrice || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-  editable: true,
-}
-
+    {
+      title: 'Unit Price',
+      dataIndex: 'unitPrice',
+      key: 'unitPrice',
+      render: (price) => 
+        parseFloat(price || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      editable: true,
+    },
+    {
+      title: 'Total Amount',
+      dataIndex: 'totalAmount',
+      key: 'totalAmount',
+      render: (amount, record) => 
+        parseFloat(amount || record.totalPrice || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      editable: true,
+    }
   ];
 
   const mergedNestedColumns = nestedColumns.map((col) => {
@@ -628,23 +655,21 @@ const generateSalesReport = async () => {
         const value = parseFloat(amount || 0);
         return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       },
-    }
-,    
+    },    
     {
-  title: 'Customer Name',
-  dataIndex: 'customerName',
-  key: 'customerName',
-  render: (text, record) => {
-    if (record.salesOrderType === "CASH") {
-      return <span>-</span>;
-    }
-    if (text === "loading...") {
-      return <span style={{ color: "#999" }}>Fetching...</span>; // 👈 shows temporary text
-    }
-    return <span>{text}</span>;
-  },
-},
-
+      title: 'Customer Name',
+      dataIndex: 'customerName',
+      key: 'customerName',
+      render: (text, record) => {
+        if (record.salesOrderType === "CASH") {
+          return <span>-</span>;
+        }
+        if (text === "loading...") {
+          return <span style={{ color: "#999" }}>Fetching...</span>;
+        }
+        return <span>{text}</span>;
+      },
+    },
     {
       title: 'Count',
       key: 'itemsCount',
@@ -701,7 +726,7 @@ const generateSalesReport = async () => {
          >
             Sales Order
         </h1>
-          {/* Form Section */}
+          
        { mounted && <div className='flex gap-5'>
         <div className='flex flex-col w-[60%] bg-[#3D3B3B] gap-2 px-8 py-8 rounded-lg'>
          <div className="flex w-full flex-col gap-1">
@@ -807,9 +832,7 @@ const generateSalesReport = async () => {
          className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-white"
         />
     </div>
-       )
-       
-       }
+       )}
 
        { isLoose && (
         <div className="flex w-full flex-col gap-1">
@@ -835,10 +858,8 @@ const generateSalesReport = async () => {
                    }}
               />
       </div>
-       )
-       }
+       )}
 
- 
 <div className="flex w-full flex-col gap-1">
     <label className='mb-1 text-white'>Item Unit Price</label>
              <InputNumber
@@ -979,12 +1000,9 @@ const generateSalesReport = async () => {
     </div>
 </div>
 
-
  </div>
  }
 
-{/* Items Table */}
-{/* Items Table */}
 {salesItems.length > 0 && (
   <div className="mt-8">
     <h2 className="text-xl font-semibold mb-4 text-white">Added Items</h2>
@@ -995,8 +1013,7 @@ const generateSalesReport = async () => {
             <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Item</th>
             <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Customer</th>
             <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Quantity</th>
-            <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Quantity ML</th>
-            <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Quantity L</th>
+            <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Quantity (Liters)</th>
             <th className="px-4 py-3 text-right text-sm font-medium text-gray-900">Unit Price</th>
             <th className="px-4 py-3 text-right text-sm font-medium text-gray-900">Total Price</th>
             <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Actions</th>
@@ -1007,17 +1024,13 @@ const generateSalesReport = async () => {
             <tr key={index} className="hover:bg-gray-50">
               <td className="px-4 py-3 text-sm text-gray-900">{item.itemName}</td>
               <td className="px-4 py-3 text-sm text-gray-900">
-                {/* Display customer name directly from the item object */}
                 {orderType === 'CASH' ? 'CASH' : (item.customer_name || '-')}
               </td>
               <td className="px-4 py-3 text-sm text-gray-900 text-center">
                 {item.quantity || 'N/A'}
               </td>
               <td className="px-4 py-3 text-sm text-gray-900 text-center">
-                {item.quantityMilliliters ? item.quantityMilliliters.toLocaleString() : 'N/A'}
-              </td>
-              <td className="px-4 py-3 text-sm text-gray-900 text-center">
-                {item.quantityLiters ? item.quantityLiters.toFixed(3) : 'N/A'}
+                {item.quantityMilliliters ? (item.quantityMilliliters / 1000).toFixed(3) : 'N/A'}
               </td>
               <td className="px-4 py-3 text-sm text-gray-900 text-right">
                 {item.unitPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -1048,7 +1061,7 @@ const generateSalesReport = async () => {
         </tbody>
         <tfoot className="bg-gray-50">
           <tr>
-            <td colSpan="6" className="px-4 py-3 text-right font-semibold text-gray-900">Grand Total:</td>
+            <td colSpan="5" className="px-4 py-3 text-right font-semibold text-gray-900">Grand Total:</td>
             <td className="px-4 py-3 text-right font-bold text-gray-900">
               {grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </td>

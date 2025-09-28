@@ -546,40 +546,40 @@ const page = () => {
   // Editable functions for nested table
   const isEditing = (record) => record.key === editingKey;
 
-  const nestedColumns = [
-    {
-      title: 'Item Code',
-      dataIndex: 'itemName',
-      key: 'itemName',
-      editable: true,
-    },
-    {
-      title: 'Quantity',
-      dataIndex: 'quantity',
-      key: 'quantity',
-      editable: true,
-    },
-    {
-      title: 'Supplier Name',
-      dataIndex: 'supplier_name',
-      key: 'supplier_name',
-      editable: true,
-    },
-    {
-      title: 'Unit Price',
-      dataIndex: 'unitPrice',
-      key: 'unitPrice',
-      render: (value) => value ? value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "-",
-      editable: true,
-    },
-    {
-      title: 'Total Amount',
-      dataIndex: 'totalPrice',
-      key: 'totalPrice',
-      render: (value) => value ? value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "-",
-      editable: true,
-    }
-  ];
+const nestedColumns = [
+  {
+    title: 'Item Code',
+    dataIndex: 'itemName',
+    key: 'itemName',
+    editable: true,
+  },
+  {
+    title: 'Quantity',
+    dataIndex: 'quantity',
+    key: 'quantity',
+    editable: true,
+  },
+  {
+    title: 'Supplier Name',
+    dataIndex: 'supplier_name',
+    key: 'supplier_name',
+    editable: true,
+  },
+  {
+    title: 'Unit Price',
+    dataIndex: 'unitPrice',
+    key: 'unitPrice',
+    render: (value) => value ? value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "-",
+    editable: true,
+  },
+  {
+    title: 'Total Amount',
+    dataIndex: 'totalPrice',
+    key: 'totalPrice',
+    render: (value) => value ? value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "-",
+    editable: true,
+  }
+];
 
   const mergedNestedColumns = nestedColumns.map((col) => {
     if (!col.editable) {
@@ -598,43 +598,43 @@ const page = () => {
   });
 
   // Main table columns with sorting
-  const mainColumns = [
-    {
-      title: 'Purchase Number',
-      dataIndex: 'grnNumber',
-      key: 'grnNumber',
-      width: '20%',
-      sorter: true,
-    },
-    {
-      title: 'Invoice Number',
-      dataIndex: 'invoiceNumber',
-      key: 'invoiceNumber',
-      width: '20%',
-      sorter: true,
-    },
-    {
-      title: 'Created At',
-      dataIndex: 'createdAt',
-      key: 'createdAt',
-      width: '20%',
-      sorter: true,
-    },
-    {
-      title: 'Total Amount',
-      dataIndex: 'totalAmount',
-      key: 'totalAmount',
-      width: '20%',
-      render: (value) => value ? value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "-",
-      sorter: true,
-    },
-    {
-      title: 'Items Count',
-      key: 'itemsCount',
-      width: '20%',
-      render: (_, record) => record.items?.length || 0,
-    },
-  ];
+const mainColumns = [
+  {
+    title: 'Purchase Number',
+    dataIndex: 'grnNumber',
+    key: 'grnNumber',
+    width: '20%',
+    sorter: true,
+  },
+  {
+    title: 'Invoice Number',
+    dataIndex: 'invoiceNumber',
+    key: 'invoiceNumber',
+    width: '20%',
+    sorter: true,
+  },
+  {
+    title: 'Created At',
+    dataIndex: 'createdAt',
+    key: 'createdAt',
+    width: '20%',
+    sorter: true,
+  },
+  {
+    title: 'Total Amount',
+    dataIndex: 'totalAmount',
+    key: 'totalAmount',
+    width: '20%',
+    render: (value) => value ? value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "-",
+    sorter: true,
+  },
+  {
+    title: 'Items Count',
+    key: 'itemsCount',
+    width: '20%',
+    render: (_, record) => record.items?.length || 0,
+  },
+];
 
   const expandedRowRender = (record) => (
     <Form form={form} component={false}>
@@ -815,8 +815,12 @@ const page = () => {
               <td className="px-4 py-3 text-sm text-gray-900">{item.itemName}</td>
               <td className="px-4 py-3 text-sm text-gray-900">{item.supplier_name}</td>
               <td className="px-4 py-3 text-sm text-gray-900 text-center">{item.quantity}</td>
-              <td className="px-4 py-3 text-sm text-gray-900 text-right">{item.unitPrice.toFixed(2)}</td>
-              <td className="px-4 py-3 text-sm text-gray-900 text-right">{item.totalPrice.toFixed(2)}</td>
+              <td className="px-4 py-3 text-sm text-gray-900 text-right">
+                {item.unitPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </td>
+              <td className="px-4 py-3 text-sm text-gray-900 text-right">
+                {item.totalPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </td>
               <td className="px-4 py-3 text-sm text-gray-900">{item.invoiceNumber}</td>
               <td className="px-4 py-3 text-sm text-gray-900 text-center">
                 <div className="flex justify-center gap-2">
@@ -842,7 +846,9 @@ const page = () => {
         <tfoot className="bg-gray-50">
           <tr>
             <td colSpan="5" className="px-4 py-3 text-right font-semibold text-gray-900">Grand Total:</td>
-            <td className="px-4 py-3 text-right font-bold text-gray-900">{grandTotal.toFixed(2)}</td>
+            <td className="px-4 py-3 text-right font-bold text-gray-900">
+              {grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </td>
             <td></td>
           </tr>
         </tfoot>
@@ -850,6 +856,7 @@ const page = () => {
     </div>
   </div>
 )}
+
 
 {/* Final Action Buttons */}
 { grnItems.length > 0 && <div className="flex gap-4 mt-8">
@@ -972,62 +979,68 @@ const page = () => {
 
     {/* Edit Items Table */}
     { mounted && editGrnItems.length > 0 && (
-      <div className="mt-6">
-        <h4 className="text-md font-semibold mb-4">Items in Sales Order</h4>
-        <div className="overflow-x-auto">
-          <table className="w-full bg-white rounded-lg shadow-md border">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Item</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Supplier</th>
-                <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Quantity</th>
-                <th className="px-4 py-3 text-right text-sm font-medium text-gray-900">Unit Price</th>
-                <th className="px-4 py-3 text-right text-sm font-medium text-gray-900">Total Price</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Invoice No</th>
-                <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {editGrnItems.map((item, index) => (
-                <tr key={index} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-sm text-gray-900">{item.itemName}</td>
-                  <td className="px-4 py-3 text-sm text-gray-900">{item.supplier_name}</td>
-                  <td className="px-4 py-3 text-sm text-gray-900 text-center">{item.quantity}</td>
-                  <td className="px-4 py-3 text-sm text-gray-900 text-right">{item.unitPrice.toFixed(2)}</td>
-                  <td className="px-4 py-3 text-sm text-gray-900 text-right">{item.totalPrice.toFixed(2)}</td>
-                  <td className="px-4 py-3 text-sm text-gray-900">{item.invoiceNumber}</td>
-                  <td className="px-4 py-3 text-sm text-gray-900 text-center">
-                    <div className="flex justify-center gap-2">
-                      <button
-                        onClick={() => handleUpdateEditItem(index)}
-                        className="text-blue-600 hover:text-blue-800 p-1"
-                        title="Edit"
-                      >
-                        <EditOutlined />
-                      </button>
-                      <button
-                        onClick={() => handleRemoveEditItem(index)}
-                        className="text-red-600 hover:text-red-800 p-1"
-                        title="Remove"
-                      >
-                        <DeleteOutlined />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot className="bg-gray-50">
-              <tr>
-                <td colSpan="5" className="px-4 py-3 text-right font-semibold text-gray-900">Grand Total:</td>
-                <td className="px-4 py-3 text-right font-bold text-gray-900">{editGrandTotal.toFixed(2)}</td>
-                <td></td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </div>
-    )}
+  <div className="mt-6">
+    <h4 className="text-md font-semibold mb-4">Items in Sales Order</h4>
+    <div className="overflow-x-auto">
+      <table className="w-full bg-white rounded-lg shadow-md border">
+        <thead className="bg-gray-50">
+          <tr>
+            <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Item</th>
+            <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Supplier</th>
+            <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Quantity</th>
+            <th className="px-4 py-3 text-right text-sm font-medium text-gray-900">Unit Price</th>
+            <th className="px-4 py-3 text-right text-sm font-medium text-gray-900">Total Price</th>
+            <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Invoice No</th>
+            <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Actions</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-200">
+          {editGrnItems.map((item, index) => (
+            <tr key={index} className="hover:bg-gray-50">
+              <td className="px-4 py-3 text-sm text-gray-900">{item.itemName}</td>
+              <td className="px-4 py-3 text-sm text-gray-900">{item.supplier_name}</td>
+              <td className="px-4 py-3 text-sm text-gray-900 text-center">{item.quantity}</td>
+              <td className="px-4 py-3 text-sm text-gray-900 text-right">
+                {item.unitPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </td>
+              <td className="px-4 py-3 text-sm text-gray-900 text-right">
+                {item.totalPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </td>
+              <td className="px-4 py-3 text-sm text-gray-900">{item.invoiceNumber}</td>
+              <td className="px-4 py-3 text-sm text-gray-900 text-center">
+                <div className="flex justify-center gap-2">
+                  <button
+                    onClick={() => handleUpdateEditItem(index)}
+                    className="text-blue-600 hover:text-blue-800 p-1"
+                    title="Edit"
+                  >
+                    <EditOutlined />
+                  </button>
+                  <button
+                    onClick={() => handleRemoveEditItem(index)}
+                    className="text-red-600 hover:text-red-800 p-1"
+                    title="Remove"
+                  >
+                    <DeleteOutlined />
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot className="bg-gray-50">
+          <tr>
+            <td colSpan="5" className="px-4 py-3 text-right font-semibold text-gray-900">Grand Total:</td>
+            <td className="px-4 py-3 text-right font-bold text-gray-900">
+              {editGrandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+)}
 
     <div className="flex justify-end gap-4 mt-6 pt-4 border-t">
       <Button onClick={handleEditModalCancel}>
