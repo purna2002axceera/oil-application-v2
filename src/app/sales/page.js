@@ -74,8 +74,7 @@ const page = () => {
     const [reportStartDate, setReportStartDate] = useState(null); // dayjs or null
     const [reportEndDate, setReportEndDate] = useState(null);     // dayjs or null
     const [reportLoading, setReportLoading] = useState(false);
-    const [customerCache, setCustomerCache] = useState({});
-
+    const [totalExpenses, setTotalExpenses] = useState(false);
 
   const getCurrentSalesNumber = async () => {
     try {
@@ -183,70 +182,46 @@ const page = () => {
     return customer ? customer.customerName : `Customer ${customerId}`
   }
 
-  // Fetch sales with search and pagination
-  const fetchAllSales = async (params = {}) => {
-  setSalesLoading(true);
-  try {
-    const {
-      page = salesPage,
-      size = salesPageSize,
-      SalesOrderType = searchOrderType,
-      SalesOrderNo = searchOrderNo,
-      CreatedAt = searchCreatedAt ? searchCreatedAt.format('YYYY-MM-DD') : '',
-    } = params;
-
-    const response = await fetch(
-      `http://localhost:8080/api/sales-order/allby?page=${page-1}&size=${size}` +
-      `&sortBy=createdAt&sortDir=desc` +
-      `&SalesOrderType=${encodeURIComponent(SalesOrderType)}` +
-      `&SalesOrderNo=${encodeURIComponent(SalesOrderNo)}` +
-      `&CreatedAt=${encodeURIComponent(CreatedAt)}`
-    );
-    const data = await response.json();
-
-    const salesList = await Promise.all(
-      (data.content || data).map(async (sale) => {
-        const formattedCreatedAt = sale.createdAt?.split('T')[0] || '';
-
-        // Fetch customerName (either from state or API)
-        let customerName = '-';
-        if (sale.salesOrderType !== 'CASH' && sale.customerId) {
-          customerName = await fetchCustomerById(sale.customerId);
-        }
-
-        return {
-          ...sale,
-          createdAt: formattedCreatedAt,
-          key: sale.id?.toString() || Math.random().toString(),
-          salesNumber: sale.salesOrderNo,
-          customerName,
-          items: (sale.items || []).map((item, index) => ({
-            ...item,
-            key: `${sale.id}-${item.id || index}`,
-            itemName: getItemName(item.itemId) || `Item ${item.itemId}`,
-            unitPrice: item.soItemUnitPrice,
-            totalPrice: item.soItemTotalAmount,
-            totalAmount: item.soItemTotalAmount,
-          })),
-        };
-      })
-    );
-
-    setAllSales(salesList);
-    setSalesTotal(data.totalElements || salesList.length);
-  } catch (error) {
-    console.error('Error fetching Sales:', error);
-  } finally {
-    setSalesLoading(false);
-  }
-};
-
-
-  // Reset the two date pickers
-const clearReportDates = () => {
-  setReportStartDate(null);
-  setReportEndDate(null);
-};
+  const fetchAllSales = async () => {
+    try {
+      const response = await fetch('http://localhost:8080/api/sales-order');
+      const data = await response.json();
+      
+      // Fetch customer names for all sales
+      const salesWithCustomerNames = await Promise.all(
+        data.map(async (sale) => {
+          const formattedCreatedAt = sale.createdAt.split('T')[0]
+          let customerName = getCustomerName(sale.customerId);
+          
+          // If customer not found in local data, fetch from API
+          if (customerName === `Customer ${sale.customerId}`) {
+            customerName = await fetchCustomerById(sale.customerId);
+          }
+          
+          return {
+            ...sale,
+            createdAt: formattedCreatedAt,
+            key: sale.id.toString(),
+            salesNumber: sale.salesOrderNo,
+            customerName: customerName,
+            items: sale.items.map((item, index) => ({
+              ...item,
+              key: `${sale.id}-${item.id || index}`,
+              itemName: getItemName(item.itemId) || `Item ${item.itemId}`,
+              unitPrice: item.soItemUnitPrice,
+              totalPrice: item.soItemTotalAmount,
+              totalAmount: item.soItemTotalAmount
+            }))
+          }
+        })
+      );
+      console.log('Sales with customer names:', salesWithCustomerNames)
+      setAllSales(salesWithCustomerNames);
+      console.log('All Sales:', data)
+    } catch (error) {
+      console.error('Error fetching Sales:', error);
+    }
+  };
 
 // Safely open a base64 PDF in a new tab
 const openPdfInNewTab = (pdfBase64) => {
@@ -285,12 +260,13 @@ const generateSalesReport = async () => {
 
   const startDate = reportStartDate.format('YYYY-MM-DD');
   const endDate = reportEndDate.format('YYYY-MM-DD');
+  const expenses = totalExpenses ? totalExpenses : 0
 
   setReportLoading(true);
   try {
     const url = `http://localhost:8080/api/reports/sales-orders`;
     const res = await axios.get(url, {
-      params: { startDate, endDate },
+      params: { startDate, endDate, expenses },
     });
 
     const pdfBase64 = res?.data?.pdfBase64;
@@ -788,7 +764,6 @@ const generateSalesReport = async () => {
                 setCreateCustomer={setCreateCustomer} 
               />
             )}
-
           </div>
     </div>}
 
@@ -964,7 +939,32 @@ const generateSalesReport = async () => {
         inputReadOnly
       />
     </div>
+
   </div>
+  
+      <div className="flex w-full flex-col gap-1">
+        <label className='mb-1 text-white'>Total Optional Expenses</label>
+               <InputNumber
+                value={ totalExpenses }
+                formatter={(value) => value?.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") }
+                parser={(value) => value.replace(/\$\s?|(,*)/g, "")}
+                onChange={(e)=>setTotalExpenses(e)}
+                placeholder="Total Optional Expenses"  
+                className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-white"
+                style={{
+                    width: "100%", 
+                    height: 48,
+                    borderRadius: 7,
+                    display: 'flex',
+                    alignItems: 'center',
+                    fontFamily: "Poppins, sans-serif",
+                    fontSize: 16 }}
+                    inputStyle={{
+                    fontFamily: "Poppins, sans-serif",
+                    fontSize: 16,
+                   }}
+         />
+   </div>
    <div className="flex gap-2 ml-auto">
       <Button
         type="primary"
