@@ -7,12 +7,13 @@ import { customToast } from '../utils/toast'
 import { Table, Button, InputNumber, Select, Popconfirm, Input } from 'antd'
 import { SearchOutlined } from '@ant-design/icons'
 
-
 const ReturnPage = () => {
   const [items, setItems] = useState([])
   const [selectedItem, setSelectedItem] = useState('')
   const [quantity, setQuantity] = useState('')
   const [isLoose, setIsLoose] = useState(false)
+  // FIX 1: Add missing looseInLiters state
+  const [looseInLiters, setLooseInLiters] = useState('')
   const [looseInMili, setLooseInMili] = useState('')
   const [returnItems, setReturnItems] = useState([])
   const [grandTotal, setGrandTotal] = useState(0)
@@ -28,25 +29,35 @@ const ReturnPage = () => {
   const [searchReturnNo, setSearchReturnNo] = useState('')
   const [searchCreatedAt, setSearchCreatedAt] = useState('')
   const [searchLoading, setSearchLoading] = useState(false)
-  const [mounted, setMounted] = useState(false);
+  const [mounted, setMounted] = useState(false)
 
-
-  // Fetch all items and returns
   useEffect(() => {
     fetchItems()
     fetchPaginatedReturns()
     getCurrentReturnNumber()
   }, [])
 
-  // Refetch returns when page, size, sort, or search changes
   useEffect(() => {
     if (mounted) fetchPaginatedReturns()
-    // eslint-disable-next-line
   }, [page, size, sortBy, sortDir])
 
   useEffect(() => {
-      setMounted(true);
-    }, []);
+    setMounted(true)
+  }, [])
+
+  // FIX 2: Auto-calculate milliliters from liters
+  useEffect(() => {
+    if (isLoose && looseInLiters) {
+      const mili = convertLitresToMilliliters(parseFloat(looseInLiters))
+      setLooseInMili(mili.toString())
+    } else if (!isLoose) {
+      setLooseInMili('')
+    }
+  }, [isLoose, looseInLiters])
+
+  const convertLitresToMilliliters = (liters) => {
+    return liters * 1000
+  }
 
   const fetchItems = async () => {
     try {
@@ -57,13 +68,11 @@ const ReturnPage = () => {
     }
   }
 
-
-  // Fetch paginated and filtered returns
   const fetchPaginatedReturns = async (searching = false) => {
     setSearchLoading(searching)
     try {
       const params = {
-        page: page - 1, // API is 0-indexed
+        page: page - 1,
         size,
         sortBy,
         sortDir,
@@ -79,7 +88,6 @@ const ReturnPage = () => {
     setSearchLoading(false)
   }
 
-  // Generate next return order number
   const getCurrentReturnNumber = async () => {
     try {
       const res = await axios.get('http://localhost:8080/api/return/last-number')
@@ -121,6 +129,7 @@ const ReturnPage = () => {
     setSelectedItem('')
     setQuantity('')
     setIsLoose(false)
+    setLooseInLiters('')
     setLooseInMili('')
     setEditingIndex(null)
   }
@@ -136,14 +145,15 @@ const ReturnPage = () => {
     setSelectedItem(value)
   }
 
+  // FIX 3: Corrected handleAddItem function
   const handleAddItem = () => {
     if (!selectedItem) {
       customToast('error', 'Please select an item')
       return
     }
     if (isLoose) {
-      if (!looseInMili || isNaN(looseInMili) || looseInMili <= 0) {
-        customToast('error', 'Please enter amount in milliliters')
+      if (!looseInLiters || isNaN(looseInLiters) || looseInLiters <= 0) {
+        customToast('error', 'Please enter amount in liters')
         return
       }
     } else {
@@ -152,21 +162,25 @@ const ReturnPage = () => {
         return
       }
     }
+
     let quantityMiliLitres = null
     let quantityLitres = null
+
     if (isLoose) {
+      quantityLitres = parseFloat(looseInLiters)
       quantityMiliLitres = parseInt(looseInMili)
-      quantityLitres = parseFloat((quantityMiliLitres / 1000).toFixed(3))
     }
+
     const newItem = {
       itemId: parseInt(selectedItem),
       itemName: getItemName(selectedItem),
       isLoose: Boolean(isLoose),
-      quantity: isLoose ? 0 : parseInt(quantity),
-      quantityLitres: isLoose ? quantityLitres : 0,
-      quantityMiliLitres: isLoose ? quantityMiliLitres : 0,
+      quantity: isLoose ? null : parseInt(quantity),
+      quantityLitres: isLoose ? quantityLitres : null,
+      quantityMiliLitres: isLoose ? quantityMiliLitres : null,
       createdAt: new Date().toISOString().slice(0, 19)
     }
+
     if (
       returnItems.some(
         (item, idx) =>
@@ -176,6 +190,7 @@ const ReturnPage = () => {
       customToast('error', 'Item already added')
       return
     }
+
     let updatedItems
     if (editingIndex !== null) {
       updatedItems = [...returnItems]
@@ -183,11 +198,13 @@ const ReturnPage = () => {
     } else {
       updatedItems = [...returnItems, newItem]
     }
+
     setReturnItems(updatedItems)
     customToast('success', editingIndex !== null ? 'Item updated' : 'Item added')
     resetForm()
   }
 
+  // FIX 4: Corrected handleSubmitReturn function
   const handleSubmitReturn = async () => {
     if (returnItems.length === 0) {
       customToast('error', 'Please add at least one item')
@@ -199,9 +216,9 @@ const ReturnPage = () => {
       createdAt: new Date().toISOString(),
       items: returnItems.map(item => ({
         itemId: item.itemId,
-        quantity: item.isLoose ? 0 : item.quantity,
-        quantityLitres: item.isLoose ? item.quantityLitres : 0,
-        quantityMiliLitres: item.isLoose ? item.quantityMiliLitres : 0,
+        quantity: item.isLoose ? null : item.quantity,
+        quantityLitres: item.isLoose ? item.quantityLitres : null,
+        quantityMiliLitres: item.isLoose ? item.quantityMiliLitres : null,
         isLoose: item.isLoose
       }))
     }
@@ -211,32 +228,42 @@ const ReturnPage = () => {
       })
       customToast('success', 'Return submitted successfully')
       resetAll()
-  fetchPaginatedReturns()
+      fetchPaginatedReturns()
     } catch (err) {
-      console.log(err);
+      console.log(err)
       customToast('error', err.response?.data?.message || 'Failed to submit return')
     }
     setIsSubmitting(false)
   }
 
-  // Updated nested columns - removed ML column, convert ML to L
   const nestedColumns = [
     { title: 'Item', dataIndex: 'itemName', key: 'itemName', width: 150 },
-    { title: 'Quantity', dataIndex: 'quantity', key: 'quantity', render: (q, r) => r.isLoose ? '-' : q, width: 120 },
+    { 
+      title: 'Quantity', 
+      dataIndex: 'quantity', 
+      key: 'quantity', 
+      render: (q, r) => r.isLoose ? '-' : (q || '-'), 
+      width: 120 
+    },
     { 
       title: 'Quantity (Liters)', 
       dataIndex: 'quantityMiliLitres', 
       key: 'quantityLitres', 
       render: (ml, record) => {
-        if (record.isLoose) {
-          // Convert milliliters to liters with 3 decimal places
-          return ml ? (ml / 1000).toFixed(3) : '0.000';
+        if (record.isLoose && ml) {
+          return (ml / 1000).toFixed(3)
         }
-        return '-';
+        return '-'
       }, 
       width: 120 
     },
-    { title: 'Is Loose', dataIndex: 'isLoose', key: 'isLoose', render: v => v ? 'Yes' : 'No', width: 120 },
+    { 
+      title: 'Is Loose', 
+      dataIndex: 'isLoose', 
+      key: 'isLoose', 
+      render: v => v ? 'Yes' : 'No', 
+      width: 120 
+    },
   ]
 
   const mainColumns = [
@@ -261,19 +288,14 @@ const ReturnPage = () => {
     />
   )
 
-  const covertMLtoLitres = (ml) =>  ml ? (ml / 1000).toFixed(3) : '0.000';
-
-
   return (
     <MainLayout>
-      {/* Header */}
       <h1 className="text-2xl font-bold mb-6 w-full py-4 px-6"
         style={{ background: 'linear-gradient(90deg, #D4D2D2 0%, #665E5E 100%)', color: '#515151' }}>
         {editingIndex !== null ? 'Update Return Item' : 'Return Items'}
       </h1>
 
-      {/* Form Section */}
-     { mounted && <div className="space-y-4 flex flex-col w-[60%] bg-[#3D3B3B] px-8 py-8 rounded-lg">
+      {mounted && <div className="space-y-4 flex flex-col w-[60%] bg-[#3D3B3B] px-8 py-8 rounded-lg">
         <div className="flex flex-col gap-3 w-full">
           <div className='flex flex-col h-[80px] gap-1'>
             <label className='mb-1 text-white' style={{ fontFamily: 'Poppins, sans-serif' }}>Return Number</label>
@@ -308,19 +330,18 @@ const ReturnPage = () => {
                 fontFamily: 'Poppins, sans-serif' 
               }}
               optionFilterProp="label"
-               filterSort={(optionA, optionB) =>
-                 (optionA?.label ?? '').toLowerCase().localeCompare((optionB?.label ?? '').toLowerCase())
-               }
-               options={items.map((item) => ({
-                 value: item.id,
-                 label: `${item.itemBrand.brandName} - ${item.itemCode}`,
-               }))}
+              filterSort={(optionA, optionB) =>
+                (optionA?.label ?? '').toLowerCase().localeCompare((optionB?.label ?? '').toLowerCase())
+              }
+              options={items.map((item) => ({
+                value: item.id,
+                label: `${item.itemBrand.brandName} - ${item.itemCode}`,
+              }))}
               disabled={isSubmitting}
             />
           </div>
         </div>
 
-        {/* Checkbox */}
         <div className="flex items-center gap-2 py-2">
           <input
             type="checkbox"
@@ -334,7 +355,6 @@ const ReturnPage = () => {
           </label>
         </div>
 
-        {/* Quantity Inputs */}
         <div className="flex flex-col gap-5">
           {!isLoose && (
             <div className="flex flex-col gap-1 h-[80px] w-full">
@@ -350,7 +370,7 @@ const ReturnPage = () => {
                   borderRadius: 7,
                   fontFamily: "Poppins, sans-serif",
                   fontSize: 16,
-                  paddingTop:5
+                  paddingTop: 5
                 }}
                 disabled={isSubmitting}
               />
@@ -359,13 +379,14 @@ const ReturnPage = () => {
 
           {isLoose && (
             <div className="flex flex-col w-full">
-              <label className="mb-1 text-white" style={{ fontFamily: 'Poppins, sans-serif' }}>Quantity In Millilitres</label>
+              <label className="mb-1 text-white" style={{ fontFamily: 'Poppins, sans-serif' }}>Quantity In Litres</label>
               <InputNumber
-                min={1}
-                value={looseInMili ? Number(looseInMili) : null}
-                onChange={(value) => setLooseInMili(value)}
-                 formatter={(value) => value?.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") }
-                 parser={(value) => value.replace(/\$\s?|(,*)/g, "")}
+                min={0.001}
+                step={0.001}
+                value={looseInLiters ? Number(looseInLiters) : null}
+                onChange={(value) => setLooseInLiters(value)}
+                formatter={(value) => value?.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
+                parser={(value) => value.replace(/\$\s?|(,*)/g, "")}
                 className="w-full"
                 style={{
                   width: "100%",
@@ -382,7 +403,6 @@ const ReturnPage = () => {
           )}
         </div>
 
-        {/* Action Buttons */}
         <div className="flex space-x-4 pt-4">
           <button
             onClick={handleAddItem}
@@ -401,10 +421,9 @@ const ReturnPage = () => {
             {editingIndex !== null ? 'Cancel' : 'Reset'}
           </button>
         </div>
-      </div> }
+      </div>}
 
-      {/* Updated Items Table - removed ML column, convert ML to L */}
-      { mounted && returnItems.length > 0 && (
+      {mounted && returnItems.length > 0 && (
         <div className="mt-8">
           <h2 className="text-xl text-white font-bold mb-4" style={{ fontFamily: 'Poppins, sans-serif' }}>Added Items</h2>
           <div className="overflow-x-auto">
@@ -425,7 +444,9 @@ const ReturnPage = () => {
                       {item.isLoose ? '-' : item.quantity}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900 text-center">
-                      {item.isLoose ? (item.quantityMiliLitres / 1000).toFixed(3) : '-'}
+                      {item.isLoose && item.quantityMiliLitres 
+                        ? (item.quantityMiliLitres / 1000).toFixed(3) 
+                        : '-'}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900 text-center">
                       {item.isLoose ? 'Yes' : 'No'}
@@ -464,7 +485,6 @@ const ReturnPage = () => {
         </div>
       )}
 
-      {/* Search & Pagination Controls - Styled Card */}
       {mounted && (
         <div className="mt-12 mb-6">
           <div className="bg-white p-6 rounded-lg shadow-md">
@@ -495,10 +515,10 @@ const ReturnPage = () => {
               </div>
               <Button
                 onClick={() => {
-                  setSearchReturnNo('');
-                  setSearchCreatedAt('');
-                  setPage(1);
-                  fetchPaginatedReturns(true);
+                  setSearchReturnNo('')
+                  setSearchCreatedAt('')
+                  setPage(1)
+                  fetchPaginatedReturns(true)
                 }}
                 style={{ height: 32 }}
               >
@@ -520,8 +540,7 @@ const ReturnPage = () => {
         </div>
       )}
 
-      {/* All Returns Expandable Table */}
-     { mounted && <div className="mt-12">
+      {mounted && <div className="mt-12">
         <h2 className="text-xl text-white font-bold mb-4" style={{ fontFamily: 'Poppins, sans-serif' }}>All Returns</h2>
         <Table
           columns={mainColumns}
@@ -539,13 +558,13 @@ const ReturnPage = () => {
             pageSizeOptions: ['5', '10', '20', '50'],
             showQuickJumper: true,
             showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} items`,
-            onChange: (p, s) => { setPage(p); setSize(s); },
+            onChange: (p, s) => { setPage(p); setSize(s) },
           }}
           loading={searchLoading}
           onChange={(pagination, filters, sorter) => {
             if (sorter && sorter.field) {
-              setSortBy(sorter.field);
-              setSortDir(sorter.order === 'ascend' ? 'asc' : 'desc');
+              setSortBy(sorter.field)
+              setSortDir(sorter.order === 'ascend' ? 'asc' : 'desc')
             }
           }}
           size="large"
@@ -554,7 +573,7 @@ const ReturnPage = () => {
           rowKey="id"
           scroll={{ x: 1000 }}
         />
-      </div> }
+      </div>}
     </MainLayout>
   )
 }

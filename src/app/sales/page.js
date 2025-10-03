@@ -9,8 +9,8 @@ import { Table, Button, Form, Input, InputNumber, Select, DatePicker, Popconfirm
 import CreateCustomer from '../components/CreateCustomer'
 import quantityCalculator from '../utils/quantityCalculator'
 
-
 const { Option } = Select
+
 const EditableCell = ({
   editing,
   dataIndex,
@@ -29,9 +29,7 @@ const EditableCell = ({
         <Form.Item
           name={dataIndex}
           style={{ margin: 0 }}
-          rules={[ { required: true,
-                     message: `Please Input ${title}!` }
-          ]}
+          rules={[ { required: true, message: `Please Input ${title}!` } ]}
         >
           {inputNode}
         </Form.Item>
@@ -42,7 +40,8 @@ const EditableCell = ({
   );
 };
 
-const page = () => {
+// FIX 1: Capitalize component name
+const Page = () => {
     const [form] = Form.useForm();
     const [salesNumber, setSalesNumber] = useState('')
     const [customerName, setCustomerName] = useState('')
@@ -52,7 +51,7 @@ const page = () => {
     const [selectedItem, setSelectedItem] = useState('')
     const [itemUnitPrice, setItemUnitPrice] = useState('')
     const [isLoose, setIsLoose] = useState(false)
-    const [looseInLiters, setLooseInLiters ] = useState('')
+    const [looseInLiters, setLooseInLiters] = useState('')
     const [looseInMili, setLooseInMili] = useState('')
     const [orderType, setOrderType] = useState('')
     const [totalPrice, setTotalPrice] = useState('')
@@ -83,9 +82,7 @@ const page = () => {
        const data = res.data
        const year = new Date().getFullYear()
        
-       // Check if any data is available
        if (data && data.trim() !== '' && data !== 'null' && data !== 'undefined') {
-         // If there's existing data, increment the last number
          try {
            const parts = data.split('-')
            if (parts.length === 3) {
@@ -103,14 +100,12 @@ const page = () => {
          }
        }
        
-       // If no data available or parsing failed, set initial sales number
        const initialNumber = `SAL-${year}-001`
        setSalesNumber(initialNumber)
        console.log('Set initial sales number:', initialNumber)
        
     } catch (error) {
         console.log('Error fetching sales number:', error)
-        // If API call fails, set initial sales number
         const year = new Date().getFullYear()
         const initialNumber = `SAL-${year}-001`
         setSalesNumber(initialNumber)
@@ -126,14 +121,26 @@ const page = () => {
     setMounted(true);
   }, []);
 
+  const convertLitresToMilliliters = (liters) => {
+    return liters * 1000;
+  };
+
+  // FIX 2: Auto-calculate milliliters from liters when loose
+  useEffect(() => {
+    if (isLoose && looseInLiters) {
+      const mili = convertLitresToMilliliters(parseFloat(looseInLiters));
+      setLooseInMili(mili.toString());
+    } else if (!isLoose) {
+      setLooseInMili('');
+    }
+  }, [isLoose, looseInLiters]);
+
   const fetchItems = async () => {
     try {
       const response = await fetch('http://localhost:8080/api/item');
       const data = await response.json();
       console.log("items",data);
-      
       setItems(data);
-      console.log(data)
     } catch (error) {
       console.error('Error fetching items:', error);
     }
@@ -153,12 +160,10 @@ const page = () => {
   const fetchCustomerById = async (customerId) => {
     if (!customerId) return null;
 
-    // If cached, return directly
     if (customerCache[customerId]) {
       return customerCache[customerId];
     }
 
-    // Mark as loading
     setCustomerCache(prev => ({ ...prev, [customerId]: "loading..." }));
 
     try {
@@ -166,7 +171,6 @@ const page = () => {
       const data = await response.json();
       const name = data.customerName || `Customer ${customerId}`;
 
-      // Save in cache
       setCustomerCache(prev => ({ ...prev, [customerId]: name }));
       return name;
     } catch (error) {
@@ -200,14 +204,12 @@ const page = () => {
         return;
       }
       
-      // Fetch customer names for all sales
       const salesWithCustomerNames = await Promise.all(
         data.map(async (sale) => {
           try {
             const formattedCreatedAt = sale.createdAt ? sale.createdAt.split('T')[0] : 'Unknown';
             let customerName = getCustomerName(sale.customerId);
             
-            // If customer not found in local data, fetch from API
             if (customerName === `Customer ${sale.customerId}`) {
               customerName = await fetchCustomerById(sale.customerId);
             }
@@ -255,10 +257,8 @@ const page = () => {
     }
   };
 
-  // Safely open a base64 PDF in a new tab
   const openPdfInNewTab = (pdfBase64) => {
     try {
-      // Accept both raw base64 or data URLs
       const clean = (pdfBase64 || '').includes(',')
         ? pdfBase64.split(',').pop()
         : pdfBase64;
@@ -272,10 +272,8 @@ const page = () => {
       const blob = new Blob([byteArray], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
 
-      // Open in new tab
       window.open(url, '_blank', 'noopener,noreferrer');
 
-      // Revoke later to free memory
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (err) {
       console.error('PDF open error:', err);
@@ -283,7 +281,6 @@ const page = () => {
     }
   };
 
-  // Call your API and open the returned PDF
   const generateSalesReport = async () => {
     if (!reportStartDate || !reportEndDate) {
       customToast('error', 'Please select both From Date and To Date.');
@@ -323,25 +320,24 @@ const page = () => {
     fetchCustomers();
   }, []);
 
-  // Fetch sales when search or pagination changes
   useEffect(() => {
     if (mounted) {
       fetchAllSales();
     }
-    // eslint-disable-next-line
   }, [mounted, salesPage, salesPageSize, searchOrderType, searchOrderNo, searchCreatedAt]);
 
   useEffect(() => {
     autoCalculateTotalPrice()
-  }, [quantity, itemUnitPrice])
+  }, [quantity, itemUnitPrice, isLoose, looseInLiters])
 
   useEffect(() => {
     calculateGrandTotal()
   }, [salesItems])
 
   const autoCalculateTotalPrice = () => {
-    if ( isLoose && itemUnitPrice ){
-      setTotalPrice(parseFloat(itemUnitPrice))
+    if (isLoose && looseInLiters && itemUnitPrice) {
+      // For loose items, calculate based on liters
+      setTotalPrice(parseFloat(looseInLiters) * parseFloat(itemUnitPrice))
     } 
     else if (!isLoose && quantity && itemUnitPrice) {
       setTotalPrice(parseFloat(quantity) * parseFloat(itemUnitPrice))
@@ -360,7 +356,7 @@ const page = () => {
     return item ? `${item.itemBrand.brandName} - ${item.itemCode}` : ''
   }
 
-  const resetForAddItem = () =>{
+  const resetForAddItem = () => {
     setQuantity('')
     setSelectedItem('')
     setItemUnitPrice('')
@@ -392,11 +388,12 @@ const page = () => {
     getCurrentSalesNumber()
   }
 
-  const handleSelectItem = (value) =>{
+  const handleSelectItem = (value) => {
     console.log(value);
     setSelectedItem(value)
   }
 
+  // FIX 3: Corrected handleAddItem function
   const handleAddItem = () => {
     if (!selectedItem || !itemUnitPrice) {
       customToast('error', 'Please fill all fields')
@@ -406,8 +403,8 @@ const page = () => {
     setFixedOrderData(true)
 
     if (isLoose) {
-      if (!looseInMili || isNaN(looseInMili) || looseInMili <= 0) {
-        customToast('error', 'Please enter amount in milliliters')
+      if (!looseInLiters || isNaN(looseInLiters) || looseInLiters <= 0) {
+        customToast('error', 'Please enter amount in Litres')
         return
       }
     } else {
@@ -418,29 +415,33 @@ const page = () => {
     }
 
     let selectedCustomer = null;
-    if (customerName) { selectedCustomer = customers.find(customer => customer.id === parseInt(customerName)) }
-
-    // For loose, calculate liters
-    let quantityMilliliters = null;
-    let quantityLiters = null;
-    if ( isLoose ) {
-      quantityMilliliters = parseInt(looseInMili);
-      quantityLiters = parseFloat((quantityMilliliters / 1000).toFixed(3));
+    if (customerName) { 
+      selectedCustomer = customers.find(customer => customer.id === parseInt(customerName)) 
     }
 
-    if( quantity && !isLoose ){
-      var response =  quantityCalculator( quantity, getItemName(selectedItem) )
-     }
-    
+    // Calculate quantities based on whether it's loose or not
+    let quantityMilliliters = null;
+    let quantityLiters = null;
+
+    if (isLoose) {
+      // For loose items, use the entered liters value
+      quantityLiters = parseFloat(looseInLiters);
+      quantityMilliliters = parseInt(looseInMili);
+    } else {
+      // For non-loose items, calculate from quantityCalculator
+      const response = quantityCalculator(quantity, getItemName(selectedItem));
+      quantityMilliliters = response?.quantityInMili || 0;
+      quantityLiters = quantityMilliliters / 1000;
+    }
 
     const newItem = {
       itemId: parseInt(selectedItem),
       itemName: getItemName(selectedItem),
       customer_name: selectedCustomer?.customerName || '',
       isLoose: Boolean(isLoose),
-      quantity: isLoose ? '' : parseInt(quantity),
-      quantityMilliliters: quantity && !isLoose ? response?.quantityInMili : quantityMilliliters,
-      quantityLiters:  0,
+      quantity: isLoose ? null : parseInt(quantity),
+      quantityMilliliters: quantityMilliliters,
+      quantityLiters: quantityLiters,
       unitPrice: parseFloat(itemUnitPrice),
       totalPrice: parseFloat(totalPrice),
       createdAt: new Date().toISOString().slice(0, 19)
@@ -464,22 +465,19 @@ const page = () => {
   }
 
   const handleUpdateItem = (index) => {
-    
     const item = salesItems[index]
     
     setSelectedItem(item.itemId.toString())
    
-    // Find customer by name to set the correct customer ID
     const customer = customers.find(c => c.customerName === item.customer_name)
     setCustomerName(customer ? customer.id.toString() : '')
-    setLooseInLiters(item?.quantityLiters)
-    setLooseInMili(item?.quantityMilliliters)
+    setLooseInLiters(item?.quantityLiters?.toString() || '')
+    setLooseInMili(item?.quantityMilliliters?.toString() || '')
     setIsLoose(Boolean(item?.isLoose))
-    setQuantity(item?.quantity?.toString())
+    setQuantity(item?.quantity?.toString() || '')
     setItemUnitPrice(item.unitPrice.toString())
     setTotalPrice(item.totalPrice.toString())
     
-    // Remove the item from the table
     const updatedItems = salesItems.filter((_, i) => i !== index)
     setSalesItems(updatedItems)
   }
@@ -490,30 +488,29 @@ const page = () => {
       return
     }
 
-    // Get the customer ID from the first item (assuming all items have the same customer)
     const firstItem = salesItems[0]
     const selectedCustomer = customers.find(customer => customer.customerName === firstItem.customer_name)
 
     const salesData = {
       salesOrderNo: salesNumber,
       salesOrderType: orderType,
-      totalAmount: parseFloat(grandTotal), // Ensure it's a number
-      customerId: parseInt(selectedCustomer?.id || null), // Ensure it's a number
+      totalAmount: parseFloat(grandTotal),
+      customerId: parseInt(selectedCustomer?.id || null),
       note: note || "",
       createdAt: new Date().toISOString(),
       items: salesItems.map(item => ({
-        itemId: parseInt(item.itemId), // Ensure it's a number
-        quantity: parseInt(item?.quantity || null), // Ensure it's a number
-        quantityLiters: parseFloat(item?.quantityLiters || null),
-        isLoose: item?.isLoose,
-        quantityMilliliters: parseInt(item?.quantityMilliliters || null),
-        soItemUnitPrice: parseFloat(item.unitPrice), // Ensure it's a number
-        soItemTotalAmount: parseFloat(item.totalPrice), // Ensure it's a number
+        itemId: parseInt(item.itemId),
+        quantity: item.quantity ? parseInt(item.quantity) : null,
+        quantityLiters: item.quantityLiters ? parseFloat(item.quantityLiters) : null,
+        isLoose: Boolean(item.isLoose),
+        quantityMilliliters: item.quantityMilliliters ? parseInt(item.quantityMilliliters) : null,
+        soItemUnitPrice: parseFloat(item.unitPrice),
+        soItemTotalAmount: parseFloat(item.totalPrice),
         createdAt: new Date().toISOString()
       }))
     }
 
-    console.log('Sales Data being sent:', JSON.stringify(salesData, null, 2)); // Debug log
+    console.log('Sales Data being sent:', JSON.stringify(salesData, null, 2));
 
     try {
       const response = await axios.post('http://localhost:8080/api/sales-order', salesData, {
@@ -523,7 +520,7 @@ const page = () => {
       })
       customToast('success', 'Sale created successfully')
       resetAll()
-      fetchAllSales() // Refresh the sales list
+      fetchAllSales()
     } catch (error) {
       console.error('Sales creation error:', error.response?.data || error.message)
       customToast('error', `Error creating sale: ${error.response?.data?.message || error.message}`)
@@ -532,10 +529,10 @@ const page = () => {
 
   const handleDeleteSale = async (salesId) => {
     try {
-        console.log("delete sale",salesId)
+      console.log("delete sale", salesId)
       const response = await axios.delete(`http://localhost:8080/api/sales-order/${salesId}`)
       customToast('success', 'Sale deleted successfully')
-      fetchAllSales() // Refresh the sales list
+      fetchAllSales()
     } catch (error) {
       customToast('error', `Error deleting sale: ${error.message}`)
     }
@@ -545,16 +542,13 @@ const page = () => {
     try {
       const response = await axios.delete(`http://localhost:8080/api/customer/${customerId}`)
       customToast('success', 'Customer deleted successfully')
-      fetchCustomers() // Refresh the customer list
+      fetchCustomers()
     } catch (error) {
       customToast('error', `Error deleting customer: ${error.message}`)
     }
   }
 
-  // Editable functions for nested table
   const isEditing = (record) => record.key === editingKey;
-
-  const covertMLtoLitres = (ml) =>  ml ? (ml / 1000).toFixed(3) : '0.000';
 
   const nestedColumns = [
     {
@@ -626,7 +620,6 @@ const page = () => {
     };
   });
 
-  // Main table columns
   const mainColumns = [
     {
       title: 'Sales Order No',
@@ -836,13 +829,13 @@ const page = () => {
 
        { isLoose && (
         <div className="flex w-full flex-col gap-1">
-        <label className='mb-1 text-white'>Quantity In Millilitres</label>
+        <label className='mb-1 text-white'>Quantity In Litres</label>
          <InputNumber
-                value={ looseInMili }
-                onChange={(value) => setLooseInMili(value)}
+                value={ looseInLiters }
+                onChange={(value) => setLooseInLiters(value)}
                 formatter={(value) => value?.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") }
                 parser={(value) => value.replace(/\$\s?|(,*)/g, "")}
-                placeholder="Millilitres" 
+                placeholder="Litres" 
                 className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-white"
                 style={{
                     width: "100%", 
@@ -918,7 +911,6 @@ const page = () => {
         />
    </div>
 
-{/* Action Buttons */}
 <div className="flex gap-4 mt-6">
   <button
     type="button"
@@ -1030,7 +1022,7 @@ const page = () => {
                 {item.quantity || 'N/A'}
               </td>
               <td className="px-4 py-3 text-sm text-gray-900 text-center">
-                {item.quantityMilliliters ? (item.quantityMilliliters / 1000).toFixed(3) : 'N/A'}
+                {item.quantityLiters ? (item.quantityLiters).toFixed(3) : 'N/A'}
               </td>
               <td className="px-4 py-3 text-sm text-gray-900 text-right">
                 {item.unitPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -1073,7 +1065,6 @@ const page = () => {
   </div>
 )}
 
-{/* Final Action Buttons */}
 { salesItems.length > 0 && <div className="flex gap-4 mt-8">
   <button
     type="button"
@@ -1091,7 +1082,6 @@ const page = () => {
   </button>
 </div> }
 
-{/* All Sales Expandable Table */}
 { mounted && (
   <div className="mt-12 mb-6">
     <div className="bg-white p-6 rounded-lg shadow-md">
@@ -1184,4 +1174,4 @@ const page = () => {
   )
 }
 
-export default page
+export default Page
