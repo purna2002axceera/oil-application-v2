@@ -12,6 +12,7 @@ export default function MainLayout({ children }) {
 
   const navLinks = [
     { name: 'Item Master', path: '/item-master' },
+    { name: 'Suppliers', path: '/suppliers' },
     { name: 'Purchase Order', path: '/grn' },
     { name: 'Sales Order', path: '/sales' },
     { name: 'Return Note', path: '/return' },
