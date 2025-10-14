@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Table, Button, Modal, Form, Input, Space, Popconfirm, message, Select } from 'antd';
 import { DeleteOutlined, EditOutlined, ShoppingOutlined, PlusOutlined } from '@ant-design/icons';
 import MainLayout from '../layouts/MainLayout';
+import { customToast } from '../utils/toast';
 
 const SupplierManagement = () => {
   const [suppliers, setSuppliers] = useState([]);
@@ -114,10 +115,10 @@ const SupplierManagement = () => {
     }
   };
 
-  // Handle add item to supplier
+  // Handle add item to supplier - FIXED VERSION
   const handleAddSupplierItem = async () => {
     if (!selectedItemId) {
-      message.warning('Please select an item');
+      customToast('warning', 'Please select an item');
       return;
     }
 
@@ -131,12 +132,25 @@ const SupplierManagement = () => {
         }),
       });
 
-      if (!response.ok) throw new Error('Failed to add item');
-      message.success('Item added successfully');
-      setSelectedItemId(null);
-      fetchSupplierItems(selectedSupplier.id);
+      const data = await response.json();
+
+      // Check if response is successful (2xx status codes)
+      if (response.ok) {
+        customToast('success', data.message || 'Item added successfully');
+        setSelectedItemId(null);
+        fetchSupplierItems(selectedSupplier.id);
+        setIsItemsModalVisible(false);
+      } else {
+        // Handle error responses (4xx, 5xx)
+        const errorMessage = data.message || data.error || 'Failed to add item';
+        customToast('error', errorMessage);
+        console.error('Error response:', data);
+      }
+      
     } catch (error) {
-      message.error('Failed to add item: ' + error.message);
+      // Handle network errors or parsing errors
+      customToast('error', 'Network error: Unable to add item');
+      console.error('Network error:', error);
     }
   };
 

@@ -45,6 +45,7 @@ const Page = () => {
     const [form] = Form.useForm();
     const [salesNumber, setSalesNumber] = useState('')
     const [customerName, setCustomerName] = useState('')
+    const [receiptNo, setReceiptNo] = useState('');
     const [customers, setCustomers] = useState([])
     const [items, setItems] = useState([])
     const [quantity, setQuantity] = useState('')
@@ -494,6 +495,7 @@ const Page = () => {
     const salesData = {
       salesOrderNo: salesNumber,
       salesOrderType: orderType,
+      receiptNo: receiptNo,
       totalAmount: parseFloat(grandTotal),
       customerId: parseInt(selectedCustomer?.id || null),
       note: note || "",
@@ -633,6 +635,14 @@ const Page = () => {
       key: 'salesOrderType',
       width: '15%',
     },
+    {
+  title: 'Receipt No',
+  dataIndex: 'receiptNo',
+  key: 'receiptNo',
+  width: '15%',
+  render: (text) => text || '-',
+},
+
     {
       title: 'Created At',
       dataIndex: 'createdAt',
@@ -784,6 +794,18 @@ const Page = () => {
             )}
           </div>
     </div>}
+
+    <div className="flex w-full flex-col gap-1">
+  <label className="mb-1 text-white">Receipt No</label>
+  <input
+    type="text"
+    placeholder="Enter Receipt No"
+    value={receiptNo}
+    onChange={(e) => setReceiptNo(e.target.value)}
+    className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-white"
+  />
+</div>
+
 
         <div className="flex w-full h-[80px] flex-col gap-1">
           <label className='mb-1 text-white'>Select Item</label>
