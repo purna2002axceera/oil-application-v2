@@ -12,8 +12,11 @@ export default function HomePage() {
   const router = useRouter();
   useEffect(() => {
     const isLoggedIn = localStorage.getItem('isLoggedIn');
-    if (!isLoggedIn) { router.push('/login') }
-  }, []);
+    if (!isLoggedIn) {
+      router.push('/login');
+    }
+  }, [router]);
+
 
   return (
     <ProtectedRoute>

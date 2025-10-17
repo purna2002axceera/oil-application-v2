@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState,useCallback } from 'react'
 import MainLayout from '../layouts/MainLayout'
 import axios from 'axios'
 import { DeleteOutlined, EditOutlined } from '@ant-design/icons'
@@ -158,35 +158,43 @@ const Page = () => {
     }
   };
 
-  const fetchCustomerById = async (customerId) => {
-    if (!customerId) return null;
+const fetchCustomerById = useCallback(async (customerId) => {
+  if (!customerId) return null;
 
-    if (customerCache[customerId]) {
-      return customerCache[customerId];
-    }
-
-    setCustomerCache(prev => ({ ...prev, [customerId]: "loading..." }));
-
-    try {
-      const response = await fetch(`http://localhost:8080/api/customer/${customerId}`);
-      const data = await response.json();
-      const name = data.customerName || `Customer ${customerId}`;
-
-      setCustomerCache(prev => ({ ...prev, [customerId]: name }));
-      return name;
-    } catch (error) {
-      console.error('Error fetching customer:', error);
-      setCustomerCache(prev => ({ ...prev, [customerId]: `Customer ${customerId}` }));
-      return `Customer ${customerId}`;
-    }
-  };
-
-  const getCustomerName = (customerId) => {
-    const customer = customers.find(customer => customer.id === customerId)
-    return customer ? customer.customerName : `Customer ${customerId}`
+  if (customerCache[customerId]) {
+    return customerCache[customerId];
   }
 
-  const fetchAllSales = async () => {
+  setCustomerCache(prev => ({ ...prev, [customerId]: "loading..." }));
+
+  try {
+    const response = await fetch(`http://localhost:8080/api/customer/${customerId}`);
+    const data = await response.json();
+    const name = data.customerName || `Customer ${customerId}`;
+
+    setCustomerCache(prev => ({ ...prev, [customerId]: name }));
+    return name;
+  } catch (error) {
+    console.error('Error fetching customer:', error);
+    setCustomerCache(prev => ({ ...prev, [customerId]: `Customer ${customerId}` }));
+    return `Customer ${customerId}`;
+  }
+}, [customerCache])
+
+ 
+
+const getCustomerName = useCallback((customerId) => {
+  const customer = customers.find(c => c.id === customerId);
+  return customer ? customer.customerName : `Customer ${customerId}`;
+}, [customers]);
+
+
+const getItemName = useCallback((itemId) => {
+  const item = items.find(item => item.id == itemId)
+  return item ? `${item.itemBrand.brandName} - ${item.itemCode}` : ''
+}, [items])
+
+  const fetchAllSales = useCallback(async () => {
     try {
       setSalesLoading(true);
       const response = await fetch('http://localhost:8080/api/sales-order');
@@ -256,7 +264,11 @@ const Page = () => {
     } finally {
       setSalesLoading(false);
     }
-  };
+  }, [fetchCustomerById, getCustomerName, getItemName]);
+
+useEffect(() => {
+  if (mounted) fetchAllSales();
+}, [mounted, fetchAllSales, fetchCustomerById, getCustomerName, getItemName]);
 
   const openPdfInNewTab = (pdfBase64) => {
     try {
@@ -322,40 +334,48 @@ const Page = () => {
   }, []);
 
   useEffect(() => {
-    if (mounted) {
-      fetchAllSales();
-    }
-  }, [mounted, salesPage, salesPageSize, searchOrderType, searchOrderNo, searchCreatedAt]);
-
-  useEffect(() => {
-    autoCalculateTotalPrice()
-  }, [quantity, itemUnitPrice, isLoose, looseInLiters])
-
-  useEffect(() => {
-    calculateGrandTotal()
-  }, [salesItems])
-
-  const autoCalculateTotalPrice = () => {
-    if (isLoose && looseInLiters && itemUnitPrice) {
-      // For loose items, calculate based on liters
-      setTotalPrice(parseFloat(looseInLiters) * parseFloat(itemUnitPrice))
-    } 
-    else if (!isLoose && quantity && itemUnitPrice) {
-      setTotalPrice(parseFloat(quantity) * parseFloat(itemUnitPrice))
-    } else {
-      setTotalPrice('')
-    }
+  if (mounted) {
+    fetchAllSales();
   }
+}, [mounted, salesPage, salesPageSize, searchOrderType, searchOrderNo, searchCreatedAt, fetchAllSales]);
 
-  const calculateGrandTotal = () => {
-    const total = salesItems.reduce((sum, item) => sum + parseFloat(item.totalPrice), 0)
-    setGrandTotal(total)
-  }
 
-  const getItemName = (itemId) => {
-    const item = items.find(item => item.id == itemId)
-    return item ? `${item.itemBrand.brandName} - ${item.itemCode}` : ''
+
+const autoCalculateTotalPrice = useCallback(() => {
+  if (isLoose && looseInLiters && itemUnitPrice) {
+    setTotalPrice(parseFloat(looseInLiters) * parseFloat(itemUnitPrice))
+  } 
+  else if (!isLoose && quantity && itemUnitPrice) {
+    setTotalPrice(parseFloat(quantity) * parseFloat(itemUnitPrice))
+  } else {
+    setTotalPrice('')
   }
+}, [isLoose, looseInLiters, itemUnitPrice, quantity])
+
+
+
+const calculateGrandTotal = useCallback(() => {
+  const total = salesItems.reduce((sum, item) => sum + parseFloat(item.totalPrice), 0)
+  setGrandTotal(total)
+}, [salesItems])
+
+useEffect(() => {
+  autoCalculateTotalPrice();
+}, [quantity, itemUnitPrice, isLoose, looseInLiters, autoCalculateTotalPrice]);
+
+useEffect(() => {
+  calculateGrandTotal();
+}, [salesItems, calculateGrandTotal]);
+
+useEffect(() => {
+  autoCalculateTotalPrice()
+}, [quantity, itemUnitPrice, isLoose, looseInLiters, autoCalculateTotalPrice])
+
+useEffect(() => {
+  calculateGrandTotal()
+}, [salesItems, calculateGrandTotal])
+
+
 
   const resetForAddItem = () => {
     setQuantity('')
@@ -1151,9 +1171,10 @@ const Page = () => {
         {(searchOrderNo || searchOrderType || searchCreatedAt) ? (
           <p>
             Showing {allSales.length} result{allSales.length !== 1 ? 's' : ''}
-            {searchOrderNo && <> for Order No "{searchOrderNo}"</>}
-            {searchOrderType && <> of type "{searchOrderType}"</>}
-            {searchCreatedAt && <> created at "{searchCreatedAt ? searchCreatedAt.format('YYYY-MM-DD') : ''}"</>}
+            {searchOrderNo && <> for Order No &quot;{searchOrderNo}&quot;</>}
+            {searchOrderType && <> of type &quot;{searchOrderType}&quot;</>}
+            {searchCreatedAt && <> created at &quot;{searchCreatedAt ? searchCreatedAt.format('YYYY-MM-DD') : ''}&quot;</>}
+
           </p>
         ) : (
           <p>Showing all {salesTotal} sales orders</p>

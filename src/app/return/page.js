@@ -1,270 +1,180 @@
-'use client'
-
-import React, { useEffect, useState } from 'react'
+"use client";
+import React, { useState, useEffect, useCallback } from "react";
+import { Input, InputNumber, Table, DatePicker, Button } from "antd";
 import MainLayout from '../layouts/MainLayout'
 import axios from 'axios'
-import { customToast } from '../utils/toast'
-import { Table, Button, InputNumber, Select, Popconfirm, Input } from 'antd'
+import { toast } from "react-toastify";
+import { Select } from "antd";
 import { SearchOutlined } from '@ant-design/icons'
 
-const ReturnPage = () => {
-  const [items, setItems] = useState([])
-  const [selectedItem, setSelectedItem] = useState('')
-  const [quantity, setQuantity] = useState('')
-  const [isLoose, setIsLoose] = useState(false)
-  // FIX 1: Add missing looseInLiters state
-  const [looseInLiters, setLooseInLiters] = useState('')
-  const [looseInMili, setLooseInMili] = useState('')
-  const [returnItems, setReturnItems] = useState([])
-  const [grandTotal, setGrandTotal] = useState(0)
-  const [ronumber, setRonumber] = useState('')
-  const [editingIndex, setEditingIndex] = useState(null)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [allReturns, setAllReturns] = useState([])
-  const [totalReturns, setTotalReturns] = useState(0)
-  const [page, setPage] = useState(1)
-  const [size, setSize] = useState(10)
-  const [sortBy, setSortBy] = useState('createdAt')
-  const [sortDir, setSortDir] = useState('desc')
-  const [searchReturnNo, setSearchReturnNo] = useState('')
-  const [searchCreatedAt, setSearchCreatedAt] = useState('')
-  const [searchLoading, setSearchLoading] = useState(false)
-  const [mounted, setMounted] = useState(false)
+export default function ReturnPage() {
+  const [items, setItems] = useState([]);
+  const [selectedItem, setSelectedItem] = useState("");
+  const [quantity, setQuantity] = useState("");
+  const [isLoose, setIsLoose] = useState(false);
+  const [quantityLitres, setQuantityLitres] = useState("");
+  const [quantityMiliLitres, setQuantityMiliLitres] = useState("");
+  const [addedItems, setAddedItems] = useState([]);
+  const [totalItems, setTotalItems] = useState(0);
+  const [returnNumber, setReturnNumber] = useState("");
+  const [editIndex, setEditIndex] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [returns, setReturns] = useState([]);
+  const [totalElements, setTotalElements] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [sortBy, setSortBy] = useState("createdAt");
+  const [sortDir, setSortDir] = useState("desc");
+  const [searchReturnNo, setSearchReturnNo] = useState("");
+  const [searchCreatedAt, setSearchCreatedAt] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [editingIndex, setEditingIndex] = useState(null);
+  const [mounted, setMounted] = useState(false);
 
-  useEffect(() => {
-    fetchItems()
-    fetchPaginatedReturns()
-    getCurrentReturnNumber()
-  }, [])
-
-  useEffect(() => {
-    if (mounted) fetchPaginatedReturns()
-  }, [page, size, sortBy, sortDir])
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  // FIX 2: Auto-calculate milliliters from liters
-  useEffect(() => {
-    if (isLoose && looseInLiters) {
-      const mili = convertLitresToMilliliters(parseFloat(looseInLiters))
-      setLooseInMili(mili.toString())
-    } else if (!isLoose) {
-      setLooseInMili('')
-    }
-  }, [isLoose, looseInLiters])
-
-  const convertLitresToMilliliters = (liters) => {
-    return liters * 1000
-  }
-
-  const fetchItems = async () => {
+  // ✅ Define callbacks BEFORE useEffect that calls them
+  const fetchItems = useCallback(async () => {
     try {
-      const res = await axios.get('http://localhost:8080/api/item')
-      setItems(res.data)
-    } catch (err) {
-      customToast('error', 'Failed to fetch items')
+      const res = await axios.get("http://localhost:8080/api/item");
+      setItems(res.data);
+    } catch (error) {
+      toast.error("Failed to fetch items");
     }
-  }
+  }, []);
 
-  const fetchPaginatedReturns = async (searching = false) => {
-    setSearchLoading(searching)
-    try {
-      const params = {
-        page: page - 1,
-        size,
-        sortBy,
-        sortDir,
+  const fetchReturns = useCallback(
+    async (force = false) => {
+      setLoading(true);
+      try {
+        const params = {
+          page: page - 1,
+          size: pageSize,
+          sortBy,
+          sortDir,
+        };
+        if (searchReturnNo) params.ReturnNo = searchReturnNo;
+        if (searchCreatedAt) params.CreatedAt = searchCreatedAt;
+        const res = await axios.get("http://localhost:8080/api/return/allby", {
+          params,
+        });
+        setReturns(res.data.content || []);
+        setTotalElements(res.data.totalElements || 0);
+      } catch (error) {
+        toast.error("Failed to fetch returns");
       }
-      if (searchReturnNo) params.ReturnNo = searchReturnNo
-      if (searchCreatedAt) params.CreatedAt = searchCreatedAt
-      const res = await axios.get('http://localhost:8080/api/return/allby', { params })
-      setAllReturns(res.data.content || [])
-      setTotalReturns(res.data.totalElements || 0)
-    } catch (err) {
-      customToast('error', 'Failed to fetch returns')
-    }
-    setSearchLoading(false)
-  }
+      setLoading(false);
+    },
+    [page, pageSize, sortBy, sortDir, searchReturnNo, searchCreatedAt]
+  );
 
-  const getCurrentReturnNumber = async () => {
+  const fetchLastNumber = useCallback(async () => {
     try {
-      const res = await axios.get('http://localhost:8080/api/return/last-number')
-      const data = res.data
-      const year = new Date().getFullYear()
-      if (data && data.trim() !== '' && data !== 'null' && data !== 'undefined') {
-        const parts = data.split('-')
+      const last = (await axios.get("http://localhost:8080/api/return/last-number"))
+        .data;
+      const year = new Date().getFullYear();
+      if (last && last.trim() && last !== "null" && last !== "undefined") {
+        const parts = last.split("-");
         if (parts.length === 3) {
-          const lastNumber = parseInt(parts[2])
-          if (!isNaN(lastNumber)) {
-            const newNumber = lastNumber + 1
-            const formattedNumber = `RET-${year}-${String(newNumber).padStart(3, '0')}`
-            setRonumber(formattedNumber)
-            return
+          const num = parseInt(parts[2]);
+          if (!isNaN(num)) {
+            setReturnNumber(`RET-${year}-${String(num + 1).padStart(3, "0")}`);
+            return;
           }
         }
       }
-      setRonumber(`RET-${year}-001`)
-    } catch (error) {
-      const year = new Date().getFullYear()
-      setRonumber(`RET-${year}-001`)
+      setReturnNumber(`RET-${year}-001`);
+    } catch {
+      const year = new Date().getFullYear();
+      setReturnNumber(`RET-${year}-001`);
     }
-  }
+  }, []);
+
+  // ✅ Now useEffect safely calls already-declared callbacks
+  useEffect(() => {
+    fetchItems();
+    fetchLastNumber();
+    fetchReturns();
+  }, [fetchItems, fetchLastNumber, fetchReturns]);
 
   useEffect(() => {
-    calculateGrandTotal()
-  }, [returnItems])
+    setTotalItems(addedItems.length);
+  }, [addedItems]);
 
-  const calculateGrandTotal = () => {
-    setGrandTotal(returnItems.length)
-  }
-
-  const getItemName = (itemId) => {
-    const item = items.find(item => item.id == itemId)
-    return item ? `${item.itemBrand?.brandName || ''} - ${item.itemCode}` : ''
-  }
+  const getItemName = (id) => {
+    const item = items.find((it) => it.id === id);
+    return item ? `${item.itemBrand?.brandName || ""} - ${item.itemCode}` : "";
+  };
 
   const resetForm = () => {
-    setSelectedItem('')
-    setQuantity('')
-    setIsLoose(false)
-    setLooseInLiters('')
-    setLooseInMili('')
-    setEditingIndex(null)
-  }
+    setSelectedItem("");
+    setQuantity("");
+    setIsLoose(false);
+    setQuantityLitres("");
+    setQuantityMiliLitres("");
+    setEditIndex(null);
+  };
 
   const resetAll = () => {
-    resetForm()
-    setReturnItems([])
-    setGrandTotal(0)
-    getCurrentReturnNumber()
-  }
+    resetForm();
+    setAddedItems([]);
+    setTotalItems(0);
+    fetchLastNumber();
+  };
 
-  const handleSelectItem = (value) => {
-    setSelectedItem(value)
-  }
-
-  // FIX 3: Corrected handleAddItem function
-  const handleAddItem = () => {
-    if (!selectedItem) {
-      customToast('error', 'Please select an item')
-      return
+  const submitReturn = async () => {
+    if (addedItems.length === 0) {
+      toast.error("Please add at least one item");
+      return;
     }
-    if (isLoose) {
-      if (!looseInLiters || isNaN(looseInLiters) || looseInLiters <= 0) {
-        customToast('error', 'Please enter amount in liters')
-        return
-      }
-    } else {
-      if (!quantity || isNaN(quantity) || quantity <= 0) {
-        customToast('error', 'Please enter quantity')
-        return
-      }
-    }
-
-    let quantityMiliLitres = null
-    let quantityLitres = null
-
-    if (isLoose) {
-      quantityLitres = parseFloat(looseInLiters)
-      quantityMiliLitres = parseInt(looseInMili)
-    }
-
-    const newItem = {
-      itemId: parseInt(selectedItem),
-      itemName: getItemName(selectedItem),
-      isLoose: Boolean(isLoose),
-      quantity: isLoose ? null : parseInt(quantity),
-      quantityLitres: isLoose ? quantityLitres : null,
-      quantityMiliLitres: isLoose ? quantityMiliLitres : null,
-      createdAt: new Date().toISOString().slice(0, 19)
-    }
-
-    if (
-      returnItems.some(
-        (item, idx) =>
-          item.itemId === newItem.itemId && idx !== editingIndex
-      )
-    ) {
-      customToast('error', 'Item already added')
-      return
-    }
-
-    let updatedItems
-    if (editingIndex !== null) {
-      updatedItems = [...returnItems]
-      updatedItems[editingIndex] = newItem
-    } else {
-      updatedItems = [...returnItems, newItem]
-    }
-
-    setReturnItems(updatedItems)
-    customToast('success', editingIndex !== null ? 'Item updated' : 'Item added')
-    resetForm()
-  }
-
-  // FIX 4: Corrected handleSubmitReturn function
-  const handleSubmitReturn = async () => {
-    if (returnItems.length === 0) {
-      customToast('error', 'Please add at least one item')
-      return
-    }
-    setIsSubmitting(true)
+    setSubmitting(true);
     const payload = {
-      ronumber,
+      ronumber: returnNumber,
       createdAt: new Date().toISOString(),
-      items: returnItems.map(item => ({
-        itemId: item.itemId,
-        quantity: item.isLoose ? null : item.quantity,
-        quantityLitres: item.isLoose ? item.quantityLitres : null,
-        quantityMiliLitres: item.isLoose ? item.quantityMiliLitres : null,
-        isLoose: item.isLoose
-      }))
-    }
+      items: addedItems.map((it) => ({
+        itemId: it.itemId,
+        quantity: it.isLoose ? null : it.quantity,
+        quantityLitres: it.isLoose ? it.quantityLitres : null,
+        quantityMiliLitres: it.isLoose ? it.quantityMiliLitres : null,
+        isLoose: it.isLoose,
+      })),
+    };
     try {
-      await axios.post('http://localhost:8080/api/return', payload, {
-        headers: { 'Content-Type': 'application/json' }
-      })
-      customToast('success', 'Return submitted successfully')
-      resetAll()
-      fetchPaginatedReturns()
-    } catch (err) {
-      console.log(err)
-      customToast('error', err.response?.data?.message || 'Failed to submit return')
+      await axios.post("http://localhost:8080/api/return", payload, {
+        headers: { "Content-Type": "application/json" },
+      });
+      toast.success("Return submitted successfully");
+      resetAll();
+      fetchReturns();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to submit return");
     }
-    setIsSubmitting(false)
-  }
+    setSubmitting(false);
+  };
 
-  const nestedColumns = [
-    { title: 'Item', dataIndex: 'itemName', key: 'itemName', width: 150 },
-    { 
-      title: 'Quantity', 
-      dataIndex: 'quantity', 
-      key: 'quantity', 
-      render: (q, r) => r.isLoose ? '-' : (q || '-'), 
-      width: 120 
+  const itemColumns = [
+    { title: "Item", dataIndex: "itemName", key: "itemName", width: 150 },
+    {
+      title: "Quantity",
+      dataIndex: "quantity",
+      key: "quantity",
+      render: (text, record) => (record.isLoose ? "-" : text || "-"),
+      width: 120,
     },
-    { 
-      title: 'Quantity (Liters)', 
-      dataIndex: 'quantityMiliLitres', 
-      key: 'quantityLitres', 
-      render: (ml, record) => {
-        if (record.isLoose && ml) {
-          return (ml / 1000).toFixed(3)
-        }
-        return '-'
-      }, 
-      width: 120 
+    {
+      title: "Quantity (Liters)",
+      dataIndex: "quantityMiliLitres",
+      key: "quantityLitres",
+      render: (text, record) =>
+        record.isLoose && text ? (text / 1000).toFixed(3) : "-",
+      width: 120,
     },
-    { 
-      title: 'Is Loose', 
-      dataIndex: 'isLoose', 
-      key: 'isLoose', 
-      render: v => v ? 'Yes' : 'No', 
-      width: 120 
+    {
+      title: "Is Loose",
+      dataIndex: "isLoose",
+      key: "isLoose",
+      render: (v) => (v ? "Yes" : "No"),
+      width: 120,
     },
-  ]
+  ];
 
   const mainColumns = [
     { title: 'Return No', dataIndex: 'ronumber', key: 'ronumber', width: '40%', sorter: true },
@@ -577,5 +487,3 @@ const ReturnPage = () => {
     </MainLayout>
   )
 }
-
-export default ReturnPage

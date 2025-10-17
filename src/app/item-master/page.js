@@ -117,11 +117,12 @@ export default function ItemMaster() {
     }
   }, []);
 
-  useEffect(() => {
-    console.log('Component mounted, fetching initial data...');
-    fetchBrands();
-    fetchItems(1, 6, 'id', 'DESC', ''); // Explicit initial values
-  }, []); // Remove dependencies to prevent infinite loops
+useEffect(() => {
+  console.log('Component mounted, fetching initial data...');
+  fetchBrands();
+  fetchItems(1, 6, 'id', 'DESC', '');
+}, [fetchBrands, fetchItems]);
+
 
   useEffect(() => {
     if (selectedBrand && pNumber && lNumber) {
@@ -611,7 +612,7 @@ export default function ItemMaster() {
           </div>
           <div className="mt-4 text-sm text-gray-600">
             {searchText ? (
-              <p>matching "{searchText}"</p>
+              <p>{`matching "${searchText}"`}</p>
             ) : (
               <p>Showing all {totalItems} items</p>
             )}
