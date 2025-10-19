@@ -1,0 +1,1219 @@
+'use client'
+
+import React, { useEffect, useState } from 'react'
+import MainLayout from '../layouts/MainLayout'
+import axios from 'axios'
+import { DeleteOutlined, EditOutlined, SearchOutlined, CalendarOutlined } from '@ant-design/icons'
+import { customToast } from '../utils/toast'
+import { Table, Button, Form, Input, InputNumber, DatePicker, Select, Modal } from 'antd'
+import moment from 'moment'
+
+const EditableCell = ({
+  editing,
+  dataIndex,
+  title,
+  inputType,
+  record,
+  index,
+  children,
+  ...restProps
+}) => {
+  const inputNode = inputType === 'number' ? <InputNumber /> : <Input />;
+
+  return (
+    <td {...restProps}>
+      {editing ? (
+        <Form.Item
+          name={dataIndex}
+          style={{ margin: 0 }}
+          rules={[
+            {
+              required: true,
+              message: `Please Input ${title}!`,
+            },
+          ]}
+        >
+          {inputNode}
+        </Form.Item>
+      ) : (
+        children
+      )}
+    </td>
+  );
+};
+
+const Page = () => {
+    const [form] = Form.useForm();
+    const [editForm] = Form.useForm();
+    const [grnNumber, setGrnNumber] = useState('')
+    const [selectedSupplier, setSelectedSupplier] = useState('')
+    const [suppliers, setSuppliers] = useState([])
+    const [items, setItems] = useState([])
+    const [quantity, setQuantity] = useState('')
+    const [selectedItem, setSelectedItem] = useState('')
+    const [itemUnitPrice, setItemUnitPrice] = useState('')
+    const [invoiceNumber, setInvoiceNumber] = useState('')
+    const [totalPrice, setTotalPrice] = useState('')
+    const [grnItems, setGrnItems] = useState([])
+    const [grandTotal, setGrandTotal] = useState(0)
+    const [allGrns, setAllGrns] = useState([])
+    const [editingKey, setEditingKey] = useState('');
+    const [mounted, setMounted] = useState(false);
+    
+    // Edit modal states
+    const [isEditModalVisible, setIsEditModalVisible] = useState(false)
+    const [editingGrn, setEditingGrn] = useState(null)
+    const [editGrnItems, setEditGrnItems] = useState([])
+    const [editGrandTotal, setEditGrandTotal] = useState(0)
+    const [editSuppliers, setEditSuppliers] = useState([])
+    const [editSelectedSupplier, setEditSelectedSupplier] = useState('')
+    const [editItems, setEditItems] = useState([])
+    const [editLoadingItems, setEditLoadingItems] = useState(false)
+
+    // Updated state for filters and pagination
+    const [filteredGrns, setFilteredGrns] = useState([])
+    const [searchGrnNumber, setSearchGrnNumber] = useState('')
+    const [searchInvoiceNumber, setSearchInvoiceNumber] = useState('')
+    const [selectedDate, setSelectedDate] = useState(null)
+    const [currentPage, setCurrentPage] = useState(1)
+    const [pageSize, setPageSize] = useState(10)
+    const [totalElements, setTotalElements] = useState(0)
+    const [loading, setLoading] = useState(false)
+    const [loadingItems, setLoadingItems] = useState(false)
+
+  const getCurrentGrnNumber = async () => {
+    try {
+       const res = await axios.get(`http://localhost:8080/api/grn/last-number`)
+       const data = res.data
+       
+       if (data && data.trim() !== '') {
+         const parts = data.split('-')
+         if (parts.length === 3 && !isNaN(parseInt(parts[2]))) {
+           const lastNumber = parseInt(parts[2])
+           const newNumber = lastNumber + 1
+           const year = new Date().getFullYear()
+           const formattedNumber = `PO-${year}-${String(newNumber).padStart(3, '0')}`
+           setGrnNumber(formattedNumber)
+         } else {
+           const year = new Date().getFullYear()
+           const initialNumber = `PO-${year}-001`
+           setGrnNumber(initialNumber)
+         }
+       } else {
+         const year = new Date().getFullYear()
+         const initialNumber = `PO-${year}-001`
+         setGrnNumber(initialNumber)
+       }
+       
+       console.log('GRN Number:', grnNumber)
+    } catch (error) {
+        console.log('Error fetching GRN number:', error)
+        const year = new Date().getFullYear()
+        const initialNumber = `GRN-${year}-001`
+        setGrnNumber(initialNumber)
+        console.log('Set initial GRN number:', initialNumber)
+    }
+  }
+
+  const fetchSuppliers = async () => {
+    try {
+      const response = await fetch('http://localhost:8080/api/suppliers');
+      const data = await response.json();
+      console.log("suppliers", data);
+      setSuppliers(data);
+    } catch (error) {
+      console.error('Error fetching suppliers:', error);
+      customToast('error', 'Error fetching suppliers');
+    }
+  };
+
+  const fetchSupplierItems = async (supplierId) => {
+    if (!supplierId) {
+      setItems([]);
+      return;
+    }
+    
+    setLoadingItems(true);
+    try {
+      const response = await fetch(`http://localhost:8080/api/supplier-items/supplier/${supplierId}/with-items`);
+      const data = await response.json();
+      console.log("supplier with items", data);
+      
+      // Extract items array from the response
+      if (data && data.items) {
+        setItems(data.items);
+      } else {
+        setItems([]);
+      }
+      
+      setSelectedItem('');
+      setItemUnitPrice('');
+      setTotalPrice('');
+    } catch (error) {
+      console.error('Error fetching supplier items:', error);
+      customToast('error', 'Error fetching supplier items');
+      setItems([]);
+    } finally {
+      setLoadingItems(false);
+    }
+  };
+
+  const fetchEditSupplierItems = async (supplierId) => {
+    if (!supplierId) {
+      setEditItems([]);
+      return;
+    }
+    
+    setEditLoadingItems(true);
+    try {
+      const response = await fetch(`http://localhost:8080/api/supplier-items/supplier/${supplierId}/with-items`);
+      const data = await response.json();
+      console.log("edit supplier with items", data);
+      
+      // Extract items array from the response
+      if (data && data.items) {
+        setEditItems(data.items);
+      } else {
+        setEditItems([]);
+      }
+    } catch (error) {
+      console.error('Error fetching supplier items:', error);
+      customToast('error', 'Error fetching supplier items');
+      setEditItems([]);
+    } finally {
+      setEditLoadingItems(false);
+    }
+  };
+
+  useEffect(() => {
+    setMounted(true);
+    getCurrentGrnNumber();
+    fetchSuppliers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (mounted) {
+      fetchAllGrns();
+    }
+  }, [mounted]);
+
+  useEffect(() => {
+    autoCalculateTotalPrice()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quantity, itemUnitPrice])
+
+  useEffect(() => {
+    calculateGrandTotal()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [grnItems])
+
+  useEffect(() => {
+    calculateEditGrandTotal()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editGrnItems])
+
+  const fetchAllGrns = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`http://localhost:8080/api/grn`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      const grnData = (data || []).map(grn => {
+        const formattedCreatedAt = grn.createdAt 
+          ? grn.createdAt.split('T')[0] 
+          : 'N/A';
+        
+        return {
+          ...grn,
+          createdAt: formattedCreatedAt,
+          key: grn.id.toString(),
+          items: (grn.items || []).map((item, index) => ({
+            ...item,
+            key: `${grn.id}-${item.id || index}`,
+            itemName: item.itemCode || `Item ${item.itemId}`
+          }))
+        };
+      });
+      
+      setAllGrns(grnData);
+      setFilteredGrns(grnData);
+    } catch (error) {
+      console.error('Error fetching GRNs:', error);
+      customToast('error', 'Error fetching GRNs');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const applyFilters = async (pageNum = 1, pageSz = pageSize, sortBy = 'createdAt', sortDir = 'desc') => {
+    if (!searchGrnNumber && !searchInvoiceNumber && !selectedDate) {
+      fetchAllGrns();
+      return;
+    }
+
+    setLoading(true);
+    let url = `http://localhost:8080/api/grn/search?`;
+    
+    if (searchGrnNumber) {
+      url += `grnNumber=${encodeURIComponent(searchGrnNumber)}&`;
+    }
+    if (searchInvoiceNumber) {
+      url += `invoiceNumber=${encodeURIComponent(searchInvoiceNumber)}&`;
+    }
+    
+    url += `page=${pageNum-1}&size=${pageSz}&sortBy=${sortBy}&sortDir=${sortDir}`;
+    
+    try {
+      const response = await fetch(url);
+      const data = await response.json();
+      
+      let grnData = (data.content || []).map(grn => {
+        const formattedCreatedAt = grn.createdAt.split('T')[0]
+        return {
+          ...grn,
+          createdAt: formattedCreatedAt,
+          key: grn.id.toString(),
+          items: grn.items.map((item, index) => ({
+            ...item,
+            key: `${grn.id}-${item.id || index}`,
+            itemName: item.itemCode || `Item ${item.itemId}`
+          }))
+        }
+      });
+
+      if (selectedDate) {
+        const selectedDateStr = selectedDate.format('YYYY-MM-DD');
+        grnData = grnData.filter(grn => grn.createdAt === selectedDateStr);
+      }
+
+      setFilteredGrns(grnData);
+      setTotalElements(selectedDate ? grnData.length : (data.totalElements || 0));
+      setCurrentPage(pageNum);
+    } catch (error) {
+      console.error('Error searching GRNs:', error);
+      customToast('error', 'Error searching purchase orders');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const handleSelectSupplier = (supplierId) => {
+    setSelectedSupplier(supplierId);
+    fetchSupplierItems(supplierId);
+  };
+
+  const handleSelectItem = (itemId) => {
+    setSelectedItem(itemId);
+    const selectedItemData = items.find(item => item.id === itemId);
+    if (selectedItemData) {
+      setItemUnitPrice(selectedItemData.wholesalePrice);
+    }
+  }
+
+  const autoCalculateTotalPrice = () => {
+    if (quantity && itemUnitPrice) {
+      setTotalPrice(parseFloat(quantity) * parseFloat(itemUnitPrice))
+    } else {
+      setTotalPrice('')
+    }
+  }
+
+  const calculateGrandTotal = () => {
+    const total = grnItems.reduce((sum, item) => sum + parseFloat(item.totalPrice), 0)
+    setGrandTotal(total)
+  }
+
+  const calculateEditGrandTotal = () => {
+    const total = editGrnItems.reduce((sum, item) => sum + parseFloat(item.totalPrice), 0)
+    setEditGrandTotal(total)
+  }
+
+  const getItemName = (itemId) => {
+    const item = items.find(item => item.id == itemId)
+    return item ? item.itemCode : ''
+  }
+
+  const resetForm = () => {
+    setQuantity('')
+    setSelectedItem('')
+    setItemUnitPrice('')
+    setTotalPrice('')
+  }
+
+  const resetAll = () => {
+    resetForm()
+    setGrnItems([])
+    setGrandTotal(0)
+    setInvoiceNumber('')
+    setSelectedSupplier('')
+    setItems([])
+    getCurrentGrnNumber()
+  }
+
+  const handleAddItem = () => {
+    if (!selectedItem || !selectedSupplier || !quantity || !itemUnitPrice || !invoiceNumber) {
+      customToast('error', 'Please fill all fields including invoice number')
+      return
+    }  
+
+    const newItem = {
+      itemId: parseInt(selectedItem),
+      itemName: getItemName(selectedItem),
+      supplierId: parseInt(selectedSupplier),
+      quantity: parseInt(quantity),
+      unitPrice: parseFloat(itemUnitPrice),
+      totalPrice: parseFloat(totalPrice),
+      invoiceNumber: invoiceNumber,
+      createdAt: new Date().toISOString().slice(0, 19)
+    }
+
+    const existingItem = grnItems.find(item => item.itemId === parseInt(selectedItem))
+    if (existingItem) {
+      customToast('error', 'Item already added')
+      return
+    }
+
+    setGrnItems([...grnItems, newItem])
+    customToast('success', 'Item added successfully')
+
+    resetForm()
+  }
+
+  const handleRemoveItem = (index) => {
+    const updatedItems = grnItems.filter((_, i) => i !== index)
+    setGrnItems(updatedItems)
+    customToast('success', 'Item removed successfully')
+  }
+
+  const handleUpdateItem = (index) => {
+    const item = grnItems[index]
+    setSelectedItem(item.itemId.toString())
+    setSelectedSupplier(item.supplierId.toString())
+    setQuantity(item.quantity.toString())
+    setItemUnitPrice(item.unitPrice.toString())
+    setTotalPrice(item.totalPrice.toString())
+    setInvoiceNumber(item.invoiceNumber)
+    
+    const updatedItems = grnItems.filter((_, i) => i !== index)
+    setGrnItems(updatedItems)
+  }
+
+  const handleCreateGRN = async () => {
+    if (grnItems.length === 0) {
+      customToast('error', 'Please add at least one item')
+      return
+    }
+
+    if (!invoiceNumber) {
+      customToast('error', 'Please enter invoice number')
+      return
+    }
+
+    const grnData = {
+      grnNumber: grnNumber,
+      invoiceNumber: invoiceNumber,
+      totalAmount: grandTotal,
+      createdAt: new Date().toISOString().slice(0, 19),
+      items: grnItems.map(item => ({
+        grnId: 0,
+        itemId: item.itemId,
+        supplierId: item.supplierId,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        totalPrice: item.totalPrice,
+        createdAt: item.createdAt
+      }))
+    }
+
+    try {
+      const response = await axios.post('http://localhost:8080/api/grn', grnData)
+      customToast('success', 'GRN created successfully')
+      resetAll()
+      applyFilters(currentPage, pageSize)
+      console.log(grnData,"data");
+    } catch (error) {
+      customToast('error', `Error creating GRN: ${error.message}`)
+    }
+  }
+
+  const handleEditModalCancel = () => {
+    setIsEditModalVisible(false)
+    setEditingGrn(null)
+    setEditGrnItems([])
+    setEditGrandTotal(0)
+    setEditSelectedSupplier('')
+    setEditItems([])
+    editForm.resetFields()
+  }
+
+  const handleEditSupplierChange = (supplierId) => {
+    setEditSelectedSupplier(supplierId);
+    fetchEditSupplierItems(supplierId);
+  };
+
+  const handleEditItemSelect = (itemId, form) => {
+    const selectedItemData = editItems.find(item => item.id === itemId);
+    if (selectedItemData) {
+      form.setFieldsValue({
+        unitPrice: selectedItemData.wholesalePrice
+      });
+    }
+  };
+
+  const handleAddEditItem = (values) => {
+    if (!values.selectedItem || !values.supplierId || !values.quantity || !values.unitPrice || !values.invoiceNumber) {
+      customToast('error', 'Please fill all fields')
+      return
+    }
+
+    const newItem = {
+      itemId: parseInt(values.selectedItem),
+      itemName: getItemNameFromEditItems(values.selectedItem),
+      supplierId: parseInt(values.supplierId),
+      quantity: parseInt(values.quantity),
+      unitPrice: parseFloat(values.unitPrice),
+      totalPrice: parseFloat(values.quantity) * parseFloat(values.unitPrice),
+      invoiceNumber: values.invoiceNumber,
+      createdAt: new Date().toISOString().slice(0, 19)
+    }
+
+    const existingItemIndex = editGrnItems.findIndex(item => item.itemId === parseInt(values.selectedItem))
+    if (existingItemIndex !== -1) {
+      const updatedItems = [...editGrnItems]
+      updatedItems[existingItemIndex] = newItem
+      setEditGrnItems(updatedItems)
+    } else {
+      setEditGrnItems([...editGrnItems, newItem])
+    }
+
+    editForm.resetFields(['selectedItem', 'supplierId', 'quantity', 'unitPrice', 'invoiceNumber'])
+    customToast('success', 'Item added successfully')
+  }
+
+  const getItemNameFromEditItems = (itemId) => {
+    const item = editItems.find(item => item.id == itemId)
+    return item ? item.itemCode : ''
+  }
+
+  const handleRemoveEditItem = (index) => {
+    const updatedItems = editGrnItems.filter((_, i) => i !== index)
+    setEditGrnItems(updatedItems)
+    customToast('success', 'Item removed successfully')
+  }
+
+  const handleUpdateEditItem = (index) => {
+    const item = editGrnItems[index]
+    editForm.setFieldsValue({
+      selectedItem: item.itemId,
+      supplierId: item.supplierId,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      invoiceNumber: item.invoiceNumber
+    })
+    
+    const updatedItems = editGrnItems.filter((_, i) => i !== index)
+    setEditGrnItems(updatedItems)
+  }
+
+  const handleUpdateGRN = async () => {
+    try {
+      const values = editForm.getFieldsValue()
+      
+      if (!values.invoiceNumber) {
+        customToast('error', 'Please enter invoice number')
+        return
+      }
+
+      if (editGrnItems.length === 0) {
+        customToast('error', 'Please add at least one item')
+        return
+      }
+
+      const updatedGrnData = {
+        id: editingGrn.id,
+        grnNumber: values.grnNumber,
+        invoiceNumber: values.invoiceNumber,
+        totalAmount: editGrandTotal,
+        createdAt: editingGrn.createdAt,
+        items: editGrnItems.map(item => ({
+          grnId: editingGrn.id,
+          itemId: item.itemId,
+          supplierId: item.supplierId,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          totalPrice: item.totalPrice,
+          createdAt: item.createdAt
+        }))
+      }
+
+      const response = await axios.put(`http://localhost:8080/api/grn/${editingGrn.id}`, updatedGrnData)
+      customToast('success', 'GRN updated successfully')
+      setIsEditModalVisible(false)
+      setEditingGrn(null)
+      setEditGrnItems([])
+      setEditGrandTotal(0)
+      setEditSelectedSupplier('')
+      setEditItems([])
+      editForm.resetFields()
+      applyFilters(currentPage, pageSize)
+    } catch (error) {
+      customToast('error', `Error updating GRN: ${error.message}`)
+    }
+  }
+
+  const handleDateChange = (date) => {
+    setSelectedDate(date)
+    setCurrentPage(1)
+    setTimeout(() => applyFilters(1, pageSize), 100)
+  }
+
+  const clearFilters = () => {
+    setSearchGrnNumber('');
+    setSearchInvoiceNumber('');
+    setSelectedDate(null);
+    setCurrentPage(1);
+    fetchAllGrns();
+  }
+
+  const handleSearchChange = (type, value) => {
+    if (type === 'grnNumber') {
+      setSearchGrnNumber(value);
+    } else if (type === 'invoiceNumber') {
+      setSearchInvoiceNumber(value);
+    }
+    setCurrentPage(1);
+  }
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      applyFilters(1, pageSize);
+    }, 400);
+    return () => clearTimeout(handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchGrnNumber, searchInvoiceNumber, selectedDate, pageSize]);
+
+  const isEditing = (record) => record.key === editingKey;
+
+  const nestedColumns = [
+    {
+      title: 'Item Code',
+      dataIndex: 'itemName',
+      key: 'itemName',
+      editable: true,
+    },
+    {
+      title: 'Quantity',
+      dataIndex: 'quantity',
+      key: 'quantity',
+      editable: true,
+    },
+    {
+      title: 'Supplier ID',
+      dataIndex: 'supplierId',
+      key: 'supplierId',
+      editable: true,
+    },
+    {
+      title: 'Unit Price',
+      dataIndex: 'unitPrice',
+      key: 'unitPrice',
+      render: (value) => value ? value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "-",
+      editable: true,
+    },
+    {
+      title: 'Total Amount',
+      dataIndex: 'totalAmount',
+      key: 'totalAmount',
+      render: (value) => value ? value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "-",
+      editable: true,
+    }
+  ];
+
+  const mergedNestedColumns = nestedColumns.map((col) => {
+    if (!col.editable) {
+      return col;
+    }
+    return {
+      ...col,
+      onCell: (record) => ({
+        record,
+        inputType: ['quantity', 'unitPrice', 'totalAmount', 'supplierId'].includes(col.dataIndex) ? 'number' : 'text',
+        dataIndex: col.dataIndex,
+        title: col.title,
+        editing: isEditing(record),
+      }),
+    };
+  });
+
+  const mainColumns = [
+    {
+      title: 'Purchase Number',
+      dataIndex: 'grnNumber',
+      key: 'grnNumber',
+      width: '20%',
+      sorter: true,
+    },
+    {
+      title: 'Invoice Number',
+      dataIndex: 'invoiceNumber',
+      key: 'invoiceNumber',
+      width: '20%',
+      sorter: true,
+    },
+    {
+      title: 'Created At',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      width: '20%',
+      sorter: true,
+    },
+    {
+      title: 'Total Amount',
+      dataIndex: 'totalAmount',
+      key: 'totalAmount',
+      width: '20%',
+      render: (value) => value ? value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "-",
+      sorter: true,
+    },
+    {
+      title: 'Items Count',
+      key: 'itemsCount',
+      width: '10%',
+      render: (_, record) => record.items?.length || 0,
+    }
+  ];
+
+  const expandedRowRender = (record) => (
+    <Form form={form} component={false}>
+      <Table
+        components={{
+          body: { cell: EditableCell },
+        }}
+        bordered
+        dataSource={record.items}
+        columns={mergedNestedColumns}
+        pagination={false}
+        size="small"
+        className="nested-table" 
+        rowClassName="editable-row"
+      />
+    </Form>
+  );
+
+  return (
+     <MainLayout>
+         <h1 className="text-2xl font-bold mb-6 w-full py-4 px-6" 
+          style={{  background: 'linear-gradient(90deg, #D4D2D2 0%, #665E5E 100%)',  color: '#515151' }}
+         >
+            Purchase Order
+        </h1>
+          {/* Form Section */}
+     { mounted && <div className='space-y-4 flex flex-col w-[60%] bg-[#3D3B3B] px-8 py-8 rounded-lg'>
+       <div className="flex w-full flex-col gap-1">
+           <label className='mb-1 text-white'>Purchase Order Number</label>
+             <input
+               type="text"
+               placeholder="Purchase Order Number"
+               disabled
+               value={ grnNumber }
+               className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-white"
+             />
+        </div>
+
+        <div className="flex w-full flex-col gap-1">
+           <label className='mb-1 text-white'>Invoice Number *</label>
+             <input
+               type="text"
+               placeholder="Invoice Number"
+               onChange={(e)=> setInvoiceNumber(e.target.value)}
+               value={ invoiceNumber }
+               className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-white"
+               required
+             />
+        </div>
+
+        <div className="flex w-full flex-col gap-1">
+        <label className='mb-1 text-white'>Select Supplier *</label>
+        <Select
+          showSearch
+          size="large"
+          style={{ width: '100%', height: 48 }}
+          placeholder="Select a supplier"
+          value={selectedSupplier || undefined}
+          onChange={(value) => handleSelectSupplier(value)}
+          optionFilterProp="label"
+          filterSort={(optionA, optionB) =>
+            (optionA?.label ?? '').toLowerCase().localeCompare((optionB?.label ?? '').toLowerCase())
+          }
+          options={suppliers.map((supplier) => ({
+            value: supplier.id,
+            label: supplier.supplierName,
+          }))}
+        />
+        </div>
+
+        <div className="flex w-full flex-col gap-1">
+          <label className='mb-1 text-white'>Select Item</label>
+          <Select
+            showSearch
+            size="large"
+            style={{ width: '100%', height: 48 }}
+            placeholder="Select an item"
+            value={selectedItem || undefined}
+            onChange={(value) => handleSelectItem(value)}
+            loading={loadingItems}
+            optionFilterProp="label"
+            filterSort={(optionA, optionB) =>
+              (optionA?.label ?? '').toLowerCase().localeCompare((optionB?.label ?? '').toLowerCase())
+            }
+            options={items.map((item) => ({
+              value: item.id,
+              label: item.itemCode,
+            }))}
+         />
+        </div>
+
+       <div className="flex w-full flex-col gap-1">
+        <label className='mb-1 text-white'>Quantity</label>
+       <input
+         type="number"
+         placeholder="Quantity" 
+         onChange={(e) => setQuantity(e.target.value)}
+         value={ quantity }
+         className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-white"
+        />
+       </div>
+
+        <div className="flex w-full flex-col gap-1">
+            <label className='mb-1 text-white'>Item Unit Price</label>
+            <InputNumber
+    value={ itemUnitPrice }
+    onChange={(value) => setItemUnitPrice(value)}
+    formatter={(value) => value?.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") }
+    parser={(value) => value.replace(/\$\s?|(,*)/g, "")}
+    placeholder="Item Unit Price" 
+    className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-white"
+    style={{
+        width: "100%", 
+        height: 48,
+        borderRadius: 7,
+        display: 'flex',
+        alignItems: 'center',
+        fontFamily: "Poppins, sans-serif",
+        fontSize: 16 
+    }}
+/>
+        </div>
+
+       <div className="flex w-full flex-col gap-1">
+        <label className='mb-1 text-white'>Total Price</label>
+        <InputNumber
+    value={ totalPrice }
+    placeholder="Total Price" 
+    readOnly={true}
+    formatter={(value) => value?.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") }
+    parser={(value) => value.replace(/\$\s?|(,*)/g, "")}
+    className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-white"
+    style={{
+        width: "100%", 
+        height: 48,
+        borderRadius: 7,
+        display: 'flex',
+        alignItems: 'center',
+        fontFamily: "Poppins, sans-serif",
+        fontSize: 16 
+    }}
+/>
+       </div>
+
+{/* Action Buttons */}
+<div className="flex gap-4 mt-5">
+  <button
+    type="button"
+    onClick={resetForm}
+    className="px-6 py-3  bg-[#6B6B6B] text-white rounded-lg shadow-md hover:bg-[#646363] cursor-pointer transition-colors"
+  >
+    Cancel
+  </button>
+  <button
+    type="button"
+    onClick={handleAddItem}
+    className="px-6 py-3 bg-[#FC890D] text-white rounded-lg shadow-md hover:bg-[#fc890de9] cursor-pointer  transition-colors"
+  >
+    Add Item
+  </button>
+</div>
+</div> }
+
+{/* Items Table */}
+{ mounted && grnItems.length > 0 && (
+  <div className="mt-8">
+    <h2 className="text-xl font-semibold text-white mb-4">Added Items</h2>
+    <div className="overflow-x-auto">
+      <table className="w-full bg-white rounded-lg shadow-md">
+        <thead className="bg-gray-50">
+          <tr>
+            <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Item</th>
+            <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Supplier ID</th>
+            <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Quantity</th>
+            <th className="px-4 py-3 text-right text-sm font-medium text-gray-900">Unit Price</th>
+            <th className="px-4 py-3 text-right text-sm font-medium text-gray-900">Total Price</th>
+            <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Invoice No</th>
+            <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Actions</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-200">
+          {grnItems.map((item, index) => (
+            <tr key={index} className="hover:bg-gray-50">
+              <td className="px-4 py-3 text-sm text-gray-900">{item.itemName}</td>
+              <td className="px-4 py-3 text-sm text-gray-900">{item.supplierId}</td>
+              <td className="px-4 py-3 text-sm text-gray-900 text-center">{item.quantity}</td>
+              <td className="px-4 py-3 text-sm text-gray-900 text-right">
+                {item.unitPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </td>
+              <td className="px-4 py-3 text-sm text-gray-900 text-right">
+                {item.totalPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </td>
+              <td className="px-4 py-3 text-sm text-gray-900">{item.invoiceNumber}</td>
+              <td className="px-4 py-3 text-sm text-gray-900 text-center">
+                <div className="flex justify-center gap-2">
+                  <button
+                    onClick={() => handleUpdateItem(index)}
+                    className="text-blue-600 hover:text-blue-800 p-1"
+                    title="Edit"
+                  >
+                    <EditOutlined />
+                  </button>
+                  <button
+                    onClick={() => handleRemoveItem(index)}
+                    className="text-red-600 hover:text-red-800 p-1"
+                    title="Remove"
+                  >
+                    <DeleteOutlined />
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot className="bg-gray-50">
+          <tr>
+            <td colSpan="4" className="px-4 py-3 text-right font-semibold text-gray-900">Grand Total:</td>
+            <td className="px-4 py-3 text-right font-bold text-gray-900">
+              {grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </td>
+            <td colSpan="2"></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+)}
+
+{/* Final Action Buttons */}
+{ grnItems.length > 0 && <div className="flex gap-4 mt-8">
+  <button
+    type="button"
+    onClick={resetAll}
+    className="px-6 py-3 bg-[#AAA69F] text-white rounded-lg shadow-md hover:bg-[#968D86] transition-colors"
+  >
+    Reset
+  </button>
+  <button
+    type="button"
+    onClick={handleCreateGRN}
+    className="px-6 py-3 bg-[#FC890D] text-white rounded-lg shadow-md hover:bg-[#FD9A2E] transition-colors"
+  >
+    Create Purchase Order
+  </button>
+</div> }
+
+{/* Edit GRN Modal */}
+<Modal
+  title="Edit GRN"
+  open={isEditModalVisible}
+  onCancel={handleEditModalCancel}
+  width={1200}
+  footer={null}
+  className="edit-grn-modal"
+>
+  <Form
+    form={editForm}
+    layout="vertical"
+    onFinish={handleAddEditItem}
+    className="space-y-4"
+  >
+    <div className="grid grid-cols-2 gap-4 mb-6">
+      <Form.Item
+        label="GRN Number"
+        name="grnNumber"
+      >
+        <Input disabled />
+      </Form.Item>
+      
+      <Form.Item
+        label="Invoice Number"
+        name="invoiceNumber"
+        rules={[{ required: true, message: 'Please enter invoice number!' }]}
+      >
+        <Input placeholder="Invoice Number" />
+      </Form.Item>
+    </div>
+
+    <div className="bg-gray-50 p-4 rounded-lg">
+      <h3 className="text-lg font-semibold mb-4">Add/Edit Items</h3>
+      
+      <div className="grid grid-cols-2 gap-4 mb-4">
+        <Form.Item
+          label="Select Supplier"
+          name="supplierId"
+          rules={[{ required: true, message: 'Please select a supplier!' }]}
+        >
+          <Select
+            showSearch
+            placeholder="Select a supplier"
+            optionFilterProp="label"
+            onChange={handleEditSupplierChange}
+            options={editSuppliers.map((supplier) => ({
+              value: supplier.id,
+              label: supplier.supplierName,
+            }))}
+          />
+        </Form.Item>
+
+        <Form.Item
+          label="Select Item"
+          name="selectedItem"
+          rules={[{ required: true, message: 'Please select an item!' }]}
+        >
+          <Select
+            showSearch
+            placeholder="Select an item"
+            loading={editLoadingItems}
+            optionFilterProp="label"
+            onChange={(value) => handleEditItemSelect(value, editForm)}
+            options={editItems.map((item) => ({
+              value: item.id,
+              label: item.itemCode,
+            }))}
+          />
+        </Form.Item>
+
+        <Form.Item
+          label="Quantity"
+          name="quantity"
+          rules={[{ required: true, message: 'Please enter quantity!' }]}
+        >
+          <InputNumber
+            min={1}
+            placeholder="Quantity"
+            style={{ width: '100%' }}
+          />
+        </Form.Item>
+
+        <Form.Item
+          label="Unit Price"
+          name="unitPrice"
+          rules={[{ required: true, message: 'Please enter unit price!' }]}
+        >
+          <InputNumber
+            min={0}
+            step={0.01}
+            placeholder="Unit Price"
+            style={{ width: '100%' }}
+            formatter={(value) => value?.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
+            parser={(value) => value.replace(/\$\s?|(,*)/g, "")}
+          />
+        </Form.Item>
+
+        <Form.Item
+          label="Invoice Number for Item"
+          name="invoiceNumber"
+          rules={[{ required: true, message: 'Please enter invoice number for this item!' }]}
+        >
+          <Input placeholder="Invoice Number" />
+        </Form.Item>
+      </div>
+
+      <Button type="primary" htmlType="submit" className="bg-[#FC890D] hover:bg-[#FD9A2E]">
+        Add Item
+      </Button>
+    </div>
+
+    {/* Edit Items Table */}
+    { mounted && editGrnItems.length > 0 && (
+  <div className="mt-6">
+    <h4 className="text-md font-semibold mb-4">Items in Purchase Order</h4>
+    <div className="overflow-x-auto">
+      <table className="w-full bg-white rounded-lg shadow-md border">
+        <thead className="bg-gray-50">
+          <tr>
+            <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Item</th>
+            <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Supplier ID</th>
+            <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Quantity</th>
+            <th className="px-4 py-3 text-right text-sm font-medium text-gray-900">Unit Price</th>
+            <th className="px-4 py-3 text-right text-sm font-medium text-gray-900">Total Price</th>
+            <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Invoice No</th>
+            <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Actions</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-200">
+          {editGrnItems.map((item, index) => (
+            <tr key={index} className="hover:bg-gray-50">
+              <td className="px-4 py-3 text-sm text-gray-900">{item.itemName}</td>
+              <td className="px-4 py-3 text-sm text-gray-900">{item.supplierId}</td>
+              <td className="px-4 py-3 text-sm text-gray-900 text-center">{item.quantity}</td>
+              <td className="px-4 py-3 text-sm text-gray-900 text-right">
+                {item.unitPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </td>
+              <td className="px-4 py-3 text-sm text-gray-900 text-right">
+                {item.totalPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </td>
+              <td className="px-4 py-3 text-sm text-gray-900">{item.invoiceNumber}</td>
+              <td className="px-4 py-3 text-sm text-gray-900 text-center">
+                <div className="flex justify-center gap-2">
+                  <button
+                    onClick={() => handleUpdateEditItem(index)}
+                    className="text-blue-600 hover:text-blue-800 p-1"
+                    title="Edit"
+                  >
+                    <EditOutlined />
+                  </button>
+                  <button
+                    onClick={() => handleRemoveEditItem(index)}
+                    className="text-red-600 hover:text-red-800 p-1"
+                    title="Remove"
+                  >
+                    <DeleteOutlined />
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot className="bg-gray-50">
+          <tr>
+            <td colSpan="4" className="px-4 py-3 text-right font-semibold text-gray-900">Grand Total:</td>
+            <td className="px-4 py-3 text-right font-bold text-gray-900">
+              {editGrandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </td>
+            <td colSpan="2"></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+)}
+
+    <div className="flex justify-end gap-4 mt-6 pt-4 border-t">
+      <Button onClick={handleEditModalCancel}>
+        Cancel
+      </Button>
+      <Button 
+        type="primary" 
+        onClick={handleUpdateGRN}
+        className="bg-[#FC890D] hover:bg-[#FD9A2E]"
+        disabled={editGrnItems.length === 0}
+      >
+        Update Purchase Order
+      </Button>
+    </div>
+  </Form>
+</Modal>
+
+{/* Updated Filter Section with Single Date */}
+{ mounted && <div className="mt-12 mb-6">
+  <div className="bg-white p-6 rounded-lg shadow-md">
+    <h3 className="text-lg font-semibold mb-4">Filter Purchase Orders</h3>
+    <div className="flex flex-wrap gap-4 items-end">
+
+      {/* Search by GRN Number */}
+      <div className="flex flex-col">
+        <label className="mb-2 text-sm font-medium text-gray-700">GRN Number</label>
+        <Input
+          placeholder="Enter GRN Number"
+          value={searchGrnNumber}
+          onChange={e => handleSearchChange('grnNumber', e.target.value)}
+          style={{ width: 180 }}
+          allowClear
+        />
+      </div>
+
+      {/* Search by Invoice Number */}
+      <div className="flex flex-col">
+        <label className="mb-2 text-sm font-medium text-gray-700">Invoice Number</label>
+        <Input
+          placeholder="Enter Invoice Number"
+          value={searchInvoiceNumber}
+          onChange={e => handleSearchChange('invoiceNumber', e.target.value)}
+          style={{ width: 180 }}
+          allowClear
+        />
+      </div>
+
+      {/* Single Date Filter */}
+      <div className="flex flex-col">
+        <label className="mb-2 text-sm font-medium text-gray-700">Filter by Date</label>
+        <DatePicker
+          value={selectedDate}
+          onChange={handleDateChange}
+          style={{ width: 200 }}
+          format="YYYY-MM-DD"
+          placeholder="Select Date"
+          prefix={<CalendarOutlined />}
+        />
+      </div>
+
+      {/* Clear Filters Button */}
+      <Button 
+        onClick={clearFilters}
+        style={{ height: 32 }}
+      >
+        Clear Filters
+      </Button>
+    </div>
+
+    {/* Updated Filter Results Summary */}
+    <div className="mt-4 text-sm text-gray-600">
+      {(searchGrnNumber || searchInvoiceNumber || selectedDate) ? (
+        <p>
+          {searchGrnNumber && `GRN Number matching "${searchGrnNumber}"`}
+          {searchInvoiceNumber && ` Invoice Number matching "${searchInvoiceNumber}"`}
+          {selectedDate && ` created on ${selectedDate.format('YYYY-MM-DD')}`}
+          {` - Showing ${filteredGrns.length} results`}
+        </p>
+      ) : (
+        <p>Showing all purchase orders ({totalElements} total)</p>
+      )}
+    </div>
+  </div>
+</div> }
+
+{/* All GRNs Expandable Table with Enhanced Pagination */}
+{ mounted && <div className="mt-6">
+  <h2 className="text-xl font-bold text-white mb-4">All Purchase Orders</h2>
+  <Table 
+    columns={mainColumns}
+    dataSource={filteredGrns}
+    loading={loading}
+    expandable={{
+      expandedRowRender,
+      defaultExpandedRowKeys: [],
+      columnWidth: "100px",
+    }}
+    size="large"
+    className="text-base"
+    bordered
+  />
+</div> }
+    </MainLayout>
+  )
+}
+
+export default Page

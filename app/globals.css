@@ -1,0 +1,206 @@
+@import "tailwindcss";
+@import 'react-toastify/dist/ReactToastify.css';
+
+/* styles.css or global.css */
+.ant-table {
+  font-family: 'Poppins', sans-serif !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+}
+
+/* Target the disabled select input */
+.ant-select-disabled .ant-select-selector {
+  color: #000000 !important;
+}
+
+/* Target the disabled placeholder text */
+.ant-select-disabled .ant-select-selection-placeholder {
+  color: #000000 !important;
+}
+
+/* Target the disabled selected value */
+.ant-select-disabled .ant-select-selection-item {
+  color: #000000 !important;
+}
+
+/* custom.css */
+.ant-select-item-option-content {
+  font-family: 'Poppins', sans-serif !important;
+}
+
+.custom-pagination .ant-pagination-prev {
+  margin-right: 10px  !important;
+}
+.custom-pagination .ant-pagination-next {
+  margin-left: 10px  !important;
+}
+
+
+.custom-toast {
+  background: #f8f9fa !important;
+  color: #2d3436 !important;
+  font-family: 'Poppins', sans-serif !important;
+  margin-right: 15;
+  border-radius: 10px !important;
+  border: 1px solid #e9ecef !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+}
+
+.custom-toast-body {
+  font-size: 16px !important;
+}
+
+.nested-table .ant-table-thead > tr > th {
+  background-color: #2c2c2c; /* dark background */
+  color: white;               /* text color */
+  font-weight: bold;
+}
+
+/* Method 1: CSS Classes - Add this to your CSS file */
+
+/* Custom Popconfirm styling */
+.custom-popconfirm .ant-popover-title {
+  font-family: 'Poppins', sans-serif !important;
+  font-size: 16px;
+  font-weight: 600;
+  color: #ff4d4f;
+}
+
+.custom-popconfirm .ant-popover-inner-content {
+  font-family: 'Poppins', sans-serif !important;
+  font-size: 14px;
+  font-weight: 400;
+  color: #333;
+  line-height: 1.5;
+}
+
+.custom-popconfirm .ant-btn {
+  font-family: 'Poppins', sans-serif !important;
+  font-weight: 500;
+  padding: 10;
+}
+
+/* Specific button styling */
+.custom-popconfirm .ant-btn-primary {
+  background: #ff4d4f;
+  border-color: #ff4d4f;
+  font-family: 'Poppins', sans-serif !important;
+  font-weight: 600;
+  padding: 10;
+}
+
+.custom-popconfirm .ant-btn-default {
+  font-weight: 500;
+  font-family: 'Poppins', sans-serif !important;
+  color: #666;
+  padding: 10;
+}
+
+.custom-popconfirm-btn-ok {
+  background: #ff4d4f !important;
+  border-color: #ff4d4f !important;
+  font-family: 'Poppins', sans-serif !important;
+  font-weight: 400 !important;
+}
+
+.custom-popconfirm-btn-cancel {
+  color: #666 !important;
+  font-family: 'Poppins', sans-serif !important;
+  font-weight: 500 !important;
+}
+
+
+/* Alternative: Global Popconfirm styling */
+.ant-popconfirm .ant-popover-title {
+  font-family: 'Poppins', sans-serif !important;
+  font-size: 18px !important;
+  font-weight: bold !important;
+  color: #d32f2f !important;
+}
+
+.ant-popconfirm .ant-popover-inner-content {
+  font-family: 'Poppins', sans-serif !important;
+  font-size: 15px !important;
+  font-weight: 400 !important;
+  color: #424242 !important;
+}
+
+.ant-popconfirm .ant-popover-buttons .ant-btn {
+  font-family: 'Poppins', sans-serif !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+}
+
+/* Custom Ant Design Pagination Styles */
+
+/* Style pagination buttons */
+.ant-pagination .ant-pagination-item {
+  border: 1px solid #FC890D !important;
+  background-color: #fff !important;
+}
+
+.ant-pagination .ant-pagination-item a {
+  color: #FC890D !important;
+  font-weight: 500;
+}
+
+/* Active page button */
+.ant-pagination .ant-pagination-item-active {
+  background-color: #FC890D !important;
+  border-color: #FC890D !important;
+}
+
+.ant-pagination .ant-pagination-item-active a {
+  color: #fff !important;
+}
+
+/* Hover effects */
+.ant-pagination .ant-pagination-item:hover {
+  border-color: #FC890D !important;
+  background-color: #FC890D !important;
+}
+
+.ant-pagination .ant-pagination-item:hover a {
+  color: #fff !important;
+}
+
+/* Previous and Next buttons */
+.ant-pagination .ant-pagination-prev,
+.ant-pagination .ant-pagination-next {
+  border: 1px solid #FC890D !important;
+  background-color: #fff !important;
+}
+
+.ant-pagination .ant-pagination-prev:hover,
+.ant-pagination .ant-pagination-next:hover {
+  border-color: #FC890D !important;
+  background-color: #FC890D !important;
+}
+
+.ant-pagination .ant-pagination-prev .ant-pagination-item-link,
+.ant-pagination .ant-pagination-next .ant-pagination-item-link {
+  color: #FC890D !important;
+}
+
+.ant-pagination .ant-pagination-prev:hover .ant-pagination-item-link,
+.ant-pagination .ant-pagination-next:hover .ant-pagination-item-link {
+  color: #fff !important;
+}
+
+/* Disabled buttons */
+.ant-pagination .ant-pagination-disabled,
+.ant-pagination .ant-pagination-disabled:hover {
+  border-color: #d9d9d9 !important;
+  background-color: #f5f5f5 !important;
+}
+
+.ant-pagination .ant-pagination-disabled .ant-pagination-item-link,
+.ant-pagination .ant-pagination-disabled:hover .ant-pagination-item-link {
+  color: #00000040 !important;
+}
+
+
+
+
+

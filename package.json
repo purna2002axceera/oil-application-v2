@@ -1,13 +1,17 @@
 {
   "name": "oil-application-v2",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
+  "main": "electron.js",
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "next dev -p 3000",
     "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
-    "electron": "concurrently \"npm run dev\" \"wait-on http://localhost:3001 && electron .\""
+    "start": "next start -p 3000",
+    "electron-dev": "SET ELECTRON_DEV=true && concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
+    "electron-prod": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "npm run build && electron-builder",
+    "dist-win": "npm run build && electron-builder --win --x64"
   },
   "dependencies": {
     "antd": "^5.26.6",
@@ -23,9 +27,54 @@
     "@tailwindcss/postcss": "^4",
     "concurrently": "^9.2.0",
     "electron": "^37.2.4",
+    "electron-builder": "^26.0.12",
     "eslint": "^9",
     "eslint-config-next": "15.4.4",
     "tailwindcss": "^4",
     "wait-on": "^8.0.4"
+  },
+  "build": {
+    "appId": "com.oilmart.app",
+    "productName": "OilMart",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron.js",
+      ".next/**/*",
+      "public/**/*",
+      "node_modules/**/*",
+      "package.json",
+      "next.config.mjs"
+    ],
+    "extraResources": [
+      {
+        "from": "backend/oil-mart-0.0.1-SNAPSHOT.jar",
+        "to": "backend/oil-mart-0.0.1-SNAPSHOT.jar"
+      }
+    ],
+    "asarUnpack": [
+      "node_modules/next/**/*",
+      "node_modules/styled-jsx/**/*",
+      "node_modules/react/**/*",
+      "node_modules/react-dom/**/*",
+      "node_modules/@swc/**/*",
+      ".next/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Oil Mart"
+    }
   }
 }
