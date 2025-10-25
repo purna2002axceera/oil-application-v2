@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Table, Button, Popconfirm, InputNumber, Select, Spin, Flex } from 'antd';
-import { EditOutlined, DeleteOutlined, LoadingOutlined } from '@ant-design/icons';
+import { Table, Button, Popconfirm, InputNumber, Select } from 'antd';
+import { EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import { Input } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import axios from 'axios';
@@ -10,6 +10,7 @@ import CreateBrand from '../components/CreateBrand';
 import MainLayout from '../layouts/MainLayout';
 import { customToast } from '../utils/toast';
 import { L_Number_List } from '../utils/l_numbers';
+
 
 export default function ItemMaster() {
   // State variables
@@ -421,7 +422,7 @@ export default function ItemMaster() {
           color: '#515151'
         }}
       >
-        {isUpdateMode ? 'Update Item' : 'Create Item'}
+        Item Master
       </h1>
 
       {/* Form Section */}

@@ -8,6 +8,8 @@ import { customToast } from '../utils/toast'
 import { Table, Button, Form, Input, InputNumber, Select, DatePicker, Popconfirm  } from 'antd'
 import CreateCustomer from '../components/CreateCustomer'
 import quantityCalculator from '../utils/quantityCalculator'
+import Link from 'next/link'
+
 
 const { Option } = Select
 
@@ -245,7 +247,7 @@ const Page = () => {
         })
       );
       
-      console.log('Processed sales with customer names:', salesWithCustomerNames);
+      salesWithCustomerNames.sort((a, b) => b.id - a.id);
       setAllSales(salesWithCustomerNames);
       setSalesTotal(salesWithCustomerNames.length);
       
@@ -971,32 +973,19 @@ const Page = () => {
     </div>
 
   </div>
-  
-      <div className="flex w-full flex-col gap-1">
-        <label className='mb-1 text-white'>Total Optional Expenses</label>
-               <InputNumber
-                value={ totalExpenses }
-                formatter={(value) => value?.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") }
-                parser={(value) => value.replace(/\$\s?|(,*)/g, "")}
-                onChange={(e)=>setTotalExpenses(e)}
-                placeholder="Total Optional Expenses"  
-                className="w-full px-4 py-3 rounded-lg shadow-md focus:outline-none focus:ring-0 border-0 bg-white"
-                style={{
-                    width: "100%", 
-                    height: 48,
-                    borderRadius: 7,
-                    display: 'flex',
-                    alignItems: 'center',
-                    fontFamily: "Poppins, sans-serif",
-                    fontSize: 16 }}
-                    inputStyle={{
-                    fontFamily: "Poppins, sans-serif",
-                    fontSize: 16,
-                   }}
-         />
-   </div>
+
    <div className="flex gap-2 ml-auto">
-      <Button
+   <Link href='/expenses'>
+    <Button
+        type="primary"
+        loading={reportLoading}
+        className="bg-[#575656] !border-none hover:bg-[#616161]  disabled:!bg-[#707070] disabled:!text-[#ffffff] disabled:!cursor-not-allowed"
+        style={{ height: 48,  fontFamily: "Poppins, sans-serif", }}
+      >
+        Add Other Expenses
+     </Button>
+    </Link>
+     <Button
         type="primary"
         onClick={generateSalesReport}
         loading={reportLoading}

@@ -8,25 +8,12 @@ export default function MainLayout({ children }) {
   const router = useRouter();
   const pathname = usePathname();
 
-  const logout = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.clear();
-      router.push('/');
-    }
-  };
-
-  const handleNavigation = (link) => {
-    if (link.name === 'Logout') {
-      logout();
-    } else {
-      router.push(link.path);
-    }
-  };
+  const logout=() =>{ localStorage.clear() } 
 
   const navLinks = [
     { name: 'Item Master', path: '/item-master' },
     { name: 'Suppliers', path: '/suppliers' },
-    { name: 'Purchase Order', path: '/grn' },
+    { name: 'Purchase Order', path: '/purchase-order' },
     { name: 'Sales Order', path: '/sales' },
     { name: 'Return Note', path: '/return' },
     { name: 'Credit Customer', path: '/credit-customer' },
@@ -48,23 +35,30 @@ export default function MainLayout({ children }) {
           {navLinks.map((link, index) => {
             const isActive = pathname === link.path;
             return (
-              <button
-                key={`${link.path}-${index}`}
-                onClick={() => handleNavigation(link)}
-                className={`block w-full text-left px-4 py-2 rounded transition font-medium
-                  ${isActive 
-                    ? 'bg-[#2c2c2c] font-bold border-0' 
-                    : 'border border-[#969696] hover:bg-[#4c4c4c]'
-                  }`}
-              >
-                {link.name}
-              </button>
+             <a
+  key={`${link.path}-${index}`}
+  onClick={() => {
+    if (link.name === 'Logout') {
+      logout();
+      router.push('/login'); // make sure to navigate after clearing
+    }
+  }}
+  href={link.name === 'Logout' ? undefined : link.path} // prevent default navigation for logout
+  className={`block px-4 py-2 rounded transition font-medium
+    ${isActive 
+      ? 'bg-[#2c2c2c] font-bold border-0' 
+      : 'border border-[#969696] hover:bg-[#4c4c4c]'
+    }`}
+>
+  {link.name}
+</a>
+
             );
           })}
         </div>
       </aside>
 
-      <main className="flex-1 p-6 bg-[#1F1C1C] overflow-auto">{children}</main>
+      <main className="flex-1 p-6 bg-[#1F1C1C] overflow-auto">{ children }</main>
       <ToastContainer />
     </div>
   );

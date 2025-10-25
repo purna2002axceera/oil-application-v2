@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Table, Button, Modal, Form, Select, DatePicker, InputNumber, Popconfirm, Space } from 'antd';
+import { Table, Button, Modal, Form, Select, DatePicker, InputNumber, Popconfirm, Space, Input } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import MainLayout from '../layouts/MainLayout';
 import { customToast } from '../utils/toast';
@@ -13,8 +13,10 @@ const Expenses = () => {
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isCreateExpenseModalOpen, setIsCreateExpenseModalOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [form] = Form.useForm();
+  const [createExpenseForm] = Form.useForm();
 
   const API_BASE_URL = 'http://localhost:8080/api/expenses';
 
@@ -28,7 +30,7 @@ const Expenses = () => {
       const response = await axios.get(API_BASE_URL);
       setExpenses(response.data);
     } catch (error) {
-      customToast('error', `Failed to fetch expenses: ${error.message}`);
+      customToast('error', `Failed to fetch expenses: ${error.response?.data?.message || error.message}`);
     }
   }, []);
 
@@ -39,11 +41,44 @@ const Expenses = () => {
       const response = await axios.get(`${API_BASE_URL}/logs`);
       setExpenseLogs(response.data);
     } catch (error) {
-      customToast('error', `Failed to fetch expense logs: ${error.message}`);
+      customToast('error', `Failed to fetch expense logs: ${error.response?.data?.message || error.message}`);
     } finally {
       setLoading(false);
     }
   }, []);
+
+  // Create new expense type
+  const handleCreateExpense = async (values) => {
+    try {
+      await axios.post(API_BASE_URL, {
+        expenseName: values.expenseName
+      });
+      customToast('success', 'Expense type created successfully');
+      setIsCreateExpenseModalOpen(false);
+      createExpenseForm.resetFields();
+      fetchExpenses();
+    } catch (error) {
+      const errorMessage = error.response?.data?.message || error.message;
+      customToast('error', `Failed to create expense: ${errorMessage}`);
+    }
+  };
+
+  // Delete expense type
+  const handleDeleteExpense = async (expenseId, expenseName) => {
+    try {
+      await axios.delete(`${API_BASE_URL}/${expenseId}`);
+      customToast('success', `Expense type "${expenseName}" deleted successfully`);
+      fetchExpenses();
+      // Reset the form field if the deleted expense was selected
+      const currentExpenseId = form.getFieldValue('expenseId');
+      if (currentExpenseId === expenseId) {
+        form.setFieldsValue({ expenseId: undefined });
+      }
+    } catch (error) {
+      const errorMessage = error.response?.data?.message || error.message;
+      customToast('error', `Failed to delete expense: ${errorMessage}`);
+    }
+  };
 
   // Add new expense log
   const handleAddExpenseLog = async (values) => {
@@ -60,7 +95,8 @@ const Expenses = () => {
       form.resetFields();
       fetchExpenseLogs();
     } catch (error) {
-      customToast('error', `Failed to add expense log: ${error.message}`);
+      const errorMessage = error.response?.data?.message || error.message;
+      customToast('error', `Failed to add expense log: ${errorMessage}`);
     }
   };
 
@@ -71,7 +107,8 @@ const Expenses = () => {
       customToast('success', 'Expense log deleted successfully');
       fetchExpenseLogs();
     } catch (error) {
-      customToast('error', `Failed to delete expense log: ${error.message}`);
+      const errorMessage = error.response?.data?.message || error.message;
+      customToast('error', `Failed to delete expense log: ${errorMessage}`);
     }
   };
 
@@ -196,31 +233,76 @@ const Expenses = () => {
                   <label className="mb-1 text-white" style={{ fontFamily: 'Poppins, sans-serif' }}>
                     Expense Type
                   </label>
-                  <Form.Item
-                    name="expenseId"
-                    rules={[{ required: true, message: 'Please select expense type' }]}
-                    style={{ marginBottom: 0 }}
-                  >
-                    <Select
-                      placeholder="Select expense type"
-                      showSearch
-                      optionFilterProp="children"
-                      style={{
-                        height: 48,
-                        fontFamily: 'Poppins, sans-serif',
-                        fontSize: 16,
-                      }}
-                      filterSort={(optionA, optionB) =>
-                        (optionA?.label ?? '').toLowerCase().localeCompare((optionB?.label ?? '').toLowerCase())
-                      }
+                  <div className="flex gap-2">
+                    <Form.Item
+                      name="expenseId"
+                      rules={[{ required: true, message: 'Please select expense type' }]}
+                      style={{ marginBottom: 0, flex: 1 }}
                     >
-                      {expenses.map((expense) => (
-                        <Select.Option key={expense.id} value={expense.id}>
-                          {expense.expenseName}
-                        </Select.Option>
-                      ))}
-                    </Select>
-                  </Form.Item>
+                      <Select
+                        placeholder="Select expense type"
+                        showSearch
+                        optionFilterProp="children"
+                        style={{
+                          height: 48,
+                          fontFamily: 'Poppins, sans-serif',
+                          fontSize: 16,
+                        }}
+                        filterSort={(optionA, optionB) =>
+                          (optionA?.label ?? '').toLowerCase().localeCompare((optionB?.label ?? '').toLowerCase())
+                        }
+                        dropdownRender={(menu) => (
+                          <>
+                            {menu}
+                          </>
+                        )}
+                      >
+                        {expenses.map((expense) => (
+                          <Select.Option key={expense.id} value={expense.id}>
+                            <div className="flex items-center justify-between w-full">
+                              <span>{expense.expenseName}</span>
+                              <Popconfirm
+                                title={`Delete "${expense.expenseName}"?`}
+                                description="Are you sure you want to delete this expense type?"
+                                onConfirm={(e) => {
+                                  e?.stopPropagation();
+                                  handleDeleteExpense(expense.id, expense.expenseName);
+                                }}
+                                onCancel={(e) => e?.stopPropagation()}
+                                okText="Yes"
+                                cancelText="No"
+                                okButtonProps={{ style: { background: '#FC890D', borderColor: '#FC890D' } }}
+                              >
+                                <DeleteOutlined 
+                                  className="text-red-500 hover:text-red-700"
+                                  style={{ fontSize: 14 }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                  }}
+                                />
+                              </Popconfirm>
+                            </div>
+                          </Select.Option>
+                        ))}
+                      </Select>
+                    </Form.Item>
+                    <Button
+                      type="primary"
+                      shape="circle"
+                      icon={<PlusOutlined />}
+                      onClick={() => setIsCreateExpenseModalOpen(true)}
+                      style={{
+                        width: 48,
+                        height: 48,
+                        background: '#FC890D',
+                        borderColor: '#FC890D',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                      className="hover:bg-[#fc890de9]"
+                    />
+                  </div>
                 </div>
 
                 <div className="flex flex-col gap-1 mb-4">
@@ -286,6 +368,71 @@ const Expenses = () => {
                     onClick={() => {
                       setIsModalOpen(false);
                       form.resetFields();
+                    }}
+                    className="px-6 py-3 w-[120px] bg-[#6B6B6B] text-white rounded-lg shadow-md hover:bg-[#646363] transition-colors"
+                    style={{ fontFamily: 'Poppins, sans-serif', fontSize: 16 }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </Form>
+            </div>
+          </Modal>
+
+          {/* Create Expense Type Modal */}
+          <Modal
+            title={
+              <span style={{ fontFamily: 'Poppins, sans-serif', fontSize: 18, fontWeight: 'bold' }}>
+                Create New Expense Type
+              </span>
+            }
+            open={isCreateExpenseModalOpen}
+            onCancel={() => {
+              setIsCreateExpenseModalOpen(false);
+              createExpenseForm.resetFields();
+            }}
+            footer={null}
+            width={500}
+          >
+            <div className="bg-[#3D3B3B] p-6 rounded-lg">
+              <Form form={createExpenseForm} layout="vertical" onFinish={handleCreateExpense}>
+                <div className="flex flex-col gap-1 mb-6">
+                  <label className="mb-1 text-white" style={{ fontFamily: 'Poppins, sans-serif' }}>
+                    Expense Name
+                  </label>
+                  <Form.Item
+                    name="expenseName"
+                    rules={[
+                      { required: true, message: 'Please enter expense name' },
+                      { whitespace: true, message: 'Expense name cannot be empty' }
+                    ]}
+                    style={{ marginBottom: 0 }}
+                  >
+                    <Input
+                      placeholder="Enter expense name"
+                      style={{
+                        height: 48,
+                        borderRadius: 7,
+                        fontFamily: 'Poppins, sans-serif',
+                        fontSize: 16,
+                      }}
+                    />
+                  </Form.Item>
+                </div>
+
+                <div className="flex space-x-4">
+                  <button
+                    type="submit"
+                    className="px-6 py-3 w-[150px] bg-[#FC890D] text-white rounded-lg shadow-md hover:bg-[#fc890de9] transition-colors"
+                    style={{ fontFamily: 'Poppins, sans-serif', fontSize: 16 }}
+                  >
+                    Create
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCreateExpenseModalOpen(false);
+                      createExpenseForm.resetFields();
                     }}
                     className="px-6 py-3 w-[120px] bg-[#6B6B6B] text-white rounded-lg shadow-md hover:bg-[#646363] transition-colors"
                     style={{ fontFamily: 'Poppins, sans-serif', fontSize: 16 }}

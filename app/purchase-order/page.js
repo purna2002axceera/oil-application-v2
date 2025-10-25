@@ -6,7 +6,6 @@ import axios from 'axios'
 import { DeleteOutlined, EditOutlined, SearchOutlined, CalendarOutlined } from '@ant-design/icons'
 import { customToast } from '../utils/toast'
 import { Table, Button, Form, Input, InputNumber, DatePicker, Select, Modal } from 'antd'
-import moment from 'moment'
 
 const EditableCell = ({
   editing,
@@ -240,7 +239,8 @@ const Page = () => {
           }))
         };
       });
-      
+      grnData.sort((a, b) => b.id - a.id);
+    
       setAllGrns(grnData);
       setFilteredGrns(grnData);
     } catch (error) {
@@ -433,7 +433,7 @@ const Page = () => {
 
     try {
       const response = await axios.post('http://localhost:8080/api/grn', grnData)
-      customToast('success', 'GRN created successfully')
+      customToast('success', 'Purchase order created successfully')
       resetAll()
       applyFilters(currentPage, pageSize)
       console.log(grnData,"data");
