@@ -538,10 +538,7 @@ export default function ItemMaster() {
                 borderRadius: 7,
                 fontFamily: "Poppins, sans-serif",
                 fontSize: 16 }}
-            inputStyle={{
-                fontFamily: "Poppins, sans-serif",
-                fontSize: 16,
-               }}
+      /* inputStyle removed — styling moved into `style` to avoid passing unknown props to DOM elements */
             disabled={loading}
               />
             </div>
@@ -562,9 +559,7 @@ export default function ItemMaster() {
               borderRadius: 7,
               fontFamily: "Poppins, sans-serif",
               fontSize: 16 }}
-              inputStyle={{
-                fontFamily: "Poppins, sans-serif",
-                fontSize: 16 }}
+              /* inputStyle removed — styling moved into `style` to avoid passing unknown props to DOM elements */
               disabled={loading}
               />
            </div>

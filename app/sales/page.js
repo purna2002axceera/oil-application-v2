@@ -140,12 +140,30 @@ const Page = () => {
     try {
       const response = await fetch('http://localhost:8080/api/item');
       const data = await response.json();
-      console.log("items",data);
-      setItems(data);
+      // Normalize response shapes: API may return an array or an object with content/data
+      let itemsList = [];
+      if (Array.isArray(data)) {
+        itemsList = data;
+      } else if (data && Array.isArray(data.content)) {
+        itemsList = data.content;
+      } else if (data && Array.isArray(data.data)) {
+        itemsList = data.data;
+      } else {
+        // If it's an object keyed by numeric ids or single item, try to coerce to array
+        try {
+          // eslint-disable-next-line no-throw-literal
+          itemsList = Object.keys(data || {}).length ? Object.values(data) : [];
+        } catch (e) {
+          itemsList = [];
+        }
+      }
+      console.log("fetched items count:", itemsList.length, itemsList);
+      setItems(itemsList);
     } catch (error) {
       console.error('Error fetching items:', error);
     }
   };
+
 
   const fetchCustomers = async () => {
     try {
@@ -817,9 +835,10 @@ const Page = () => {
                  (optionA?.label ?? '').toLowerCase().localeCompare((optionB?.label ?? '').toLowerCase())
                }
                options={items.map((item) => ({
-                 value: item.id,
-                 label: `${item.itemBrand.brandName} - ${item.itemCode}`,
-               }))}
+                 // guard against missing nested fields
+                 value: item?.id,
+                 label: `${item?.itemBrand?.brandName || item?.brandName || ''} - ${item?.itemCode || item?.itemName || ''}`,
+               })).filter(opt => opt.value !== undefined && opt.value !== null)}
              />
        </div>
     <div className="flex items-center gap-2 py-4">
@@ -862,10 +881,7 @@ const Page = () => {
                     borderRadius: 7,
                     fontFamily: "Poppins, sans-serif",
                     fontSize: 16 }}
-                    inputStyle={{
-                    fontFamily: "Poppins, sans-serif",
-                    fontSize: 16,
-                   }}
+          /* inputStyle removed — styling moved into `style` to avoid passing unknown props to DOM elements */
               />
       </div>
        )}
@@ -887,10 +903,7 @@ const Page = () => {
                     alignItems: 'center',
                     fontFamily: "Poppins, sans-serif",
                     fontSize: 16 }}
-                    inputStyle={{
-                    fontFamily: "Poppins, sans-serif",
-                    fontSize: 16,
-                   }}
+          /* inputStyle removed — styling moved into `style` to avoid passing unknown props to DOM elements */
               />
    </div>
        <div className="flex w-full flex-col gap-1">
@@ -910,10 +923,7 @@ const Page = () => {
                     alignItems: 'center',
                     fontFamily: "Poppins, sans-serif",
                     fontSize: 16 }}
-                    inputStyle={{
-                    fontFamily: "Poppins, sans-serif",
-                    fontSize: 16,
-                   }}
+          /* inputStyle removed — styling moved into `style` to avoid passing unknown props to DOM elements */
               />
    </div>
 
@@ -989,10 +999,7 @@ const Page = () => {
                     alignItems: 'center',
                     fontFamily: "Poppins, sans-serif",
                     fontSize: 16 }}
-                    inputStyle={{
-                    fontFamily: "Poppins, sans-serif",
-                    fontSize: 16,
-                   }}
+          /* inputStyle removed — styling moved into `style` to avoid passing unknown props to DOM elements */
          />
    </div>
    <div className="flex gap-2 ml-auto">

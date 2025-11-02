@@ -172,7 +172,7 @@ const ReturnPage = () => {
     }
 
     let quantityMiliLitres = null
-    let quantityLitres = null
+  let quantityLitres = null
 
     if (isLoose) {
       quantityLitres = parseFloat(looseInLiters)
@@ -184,8 +184,9 @@ const ReturnPage = () => {
       itemName: getItemName(selectedItem),
       isLoose: Boolean(isLoose),
       quantity: isLoose ? null : parseInt(quantity),
-      quantityLitres: isLoose ? quantityLitres : null,
-      quantityMiliLitres: isLoose ? quantityMiliLitres : null,
+      // ensure quantity litres/ml are non-null to satisfy DB constraints
+      quantityLitres: isLoose ? quantityLitres : 0,
+      quantityMiliLitres: isLoose ? quantityMiliLitres : 0,
       createdAt: new Date().toISOString().slice(0, 19)
     }
 
@@ -224,8 +225,9 @@ const ReturnPage = () => {
       items: returnItems.map(item => ({
         itemId: item.itemId,
         quantity: item.isLoose ? null : item.quantity,
-        quantityLitres: item.isLoose ? item.quantityLitres : null,
-        quantityMiliLitres: item.isLoose ? item.quantityMiliLitres : null,
+        // Backend expects non-null values for quantity in liters/ml; send 0 when not loose
+        quantityLitres: item.isLoose ? item.quantityLitres : 0,
+        quantityMiliLitres: item.isLoose ? item.quantityMiliLitres : 0,
         isLoose: item.isLoose
       }))
     }
